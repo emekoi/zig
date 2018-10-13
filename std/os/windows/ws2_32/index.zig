@@ -24,11 +24,11 @@ pub const SOCK_RDM = 4;
 pub const SOCK_SEQPACKET = 5;
 
 // aparrently zig can't cast from an unsigned int to a signed int so..
-// unsigned: 0x8004667e
-pub const SOCK_NONBLOCK = -2147195266;
+// unsigned: 
+pub const SOCK_NONBLOCK = 0x8004667e;
 
-// dummy value
-pub const SOCK_CLOEXEC = 0;
+// WSA_FLAG_NO_HANDLE_INHERIT
+pub const SOCK_CLOEXEC = 0x80;
 
 pub const SOL_SOCKET = 0xffff;
 
@@ -40,11 +40,11 @@ pub const SO_SNDTIMEO = 0x1005;
 
 pub const SO_REUSEADDR = 0x0004;
 
-pub const IPPROTO_TCP = 6;
+pub const PROTO_tcp = 6;
 
-pub const IPPROTO_UDP = 17;
+pub const PROTO_udp = 17;
 
-pub const IPPROTO_RM = 113;
+pub const PROTO_rm = 113;
 
 // pub const TCP_NODELAY = 0x0001;
 
@@ -84,14 +84,16 @@ pub const IPPROTO_RM = 113;
 
 pub const INVALID_SOCKET = ~SOCKET(0);
 
+pub const WSA_FLAG_OVERLAPPED = 0x01;
+
 pub const SOCKET = usize;
 
-// pub const OVERLAPPED_COMPLETION_ROUTINE = stdcallcc fn(
-//     dwError: u16,
-//     cbTransferred: u16,
-//     lpOverlapped: LPOVERLAPPED,
-//     dwFlags: u16
-// ) void;
+pub const OVERLAPPED_COMPLETION_ROUTINE = stdcallcc fn(
+    dwError: u16,
+    cbTransferred: u16,
+    lpOverlapped: LPOVERLAPPED,
+    dwFlags: u16
+) void;
 
 pub const in_port_t = c_ushort;
 pub const sa_family_t = c_ushort;
@@ -143,6 +145,16 @@ pub const WSAData = extern struct {
 //     buf: [*]u8
 // };
 
+pub const iovec = extern struct {
+    iov_len: usize,
+    iov_base: [*]u8,
+};
+
+pub const iovec_const = extern struct {
+    iov_len: usize,
+    iov_base: [*]const u8,
+};
+
 // pub extern "ws2_32" stdcallcc fn getnameinfo(
 //     pSockaddr: *const sockaddr,
 //     SockaddrLength: socklen_t,
@@ -187,15 +199,15 @@ pub extern "ws2_32" stdcallcc fn WSAStartup(wVersionRequired: WORD, lpWSAData: *
 
 // pub extern "ws2_32" stdcallcc fn WSAUnhookBlockingHook() c_int;
 
-// pub extern "ws2_32" stdcallcc fn WSARecv(
-//     s: SOCKET,
-//     lpBuffers: [*]WSABuf,
-//     dwBufferCount: u32,
-//     lpNumberOfBytesSent: *u32,
-//     lpFlags: *u32,
-//     lpOverlapped: *OVERLAPPED,
-//     lpCompletionRoutine: OVERLAPPED_COMPLETION_ROUTINE
-// ) c_int;
+pub extern "ws2_32" stdcallcc fn WSARecv(
+    s: SOCKET,
+    lpBuffers: [*]io_vec,
+    dwBufferCount: u32,
+    lpNumberOfBytesRecvd: *u32,
+    lpFlags: *u32,
+    lpOverlapped: ?*OVERLAPPED,
+    lpCompletionRoutine: ?OVERLAPPED_COMPLETION_ROUTINE
+) c_int;
 
 // pub extern "ws2_32" stdcallcc fn WSARecvFrom(
 //     s: SOCKET,
@@ -209,15 +221,15 @@ pub extern "ws2_32" stdcallcc fn WSAStartup(wVersionRequired: WORD, lpWSAData: *
 //     lpCompletionRoutine: OVERLAPPED_COMPLETION_ROUTINE
 // ) c_int;
 
-// pub extern "ws2_32" stdcallcc fn WSASend(
-//     s: SOCKET,
-//     lpBuffers: [*]WSABuf,
-//     dwBufferCount: u32,
-//     lpNumberOfBytesSent: *u32,
-//     dwFlags: u32,
-//     lpOverlapped: *OVERLAPPED,
-//     lpCompletionRoutine: OVERLAPPED_COMPLETION_ROUTINE
-// ) c_int;
+pub extern "ws2_32" stdcallcc fn WSASend(
+    s: SOCKET,
+    lpBuffers: [*]iovec_const,
+    dwBufferCount: u32,
+    lpNumberOfBytesSent: *u32,
+    dwFlags: u32,
+    lpOverlapped: ?*OVERLAPPED,
+    lpCompletionRoutine: ?OVERLAPPED_COMPLETION_ROUTINE
+) c_int;
 
 // pub extern "ws2_32" stdcallcc fn WSASendTo(
 //     s: SOCKET,
@@ -303,6 +315,28 @@ pub extern "ws2_32" stdcallcc fn send(s: SOCKET, buf: ?[*]const u8, len: c_int, 
 
 pub extern "ws2_32" stdcallcc fn shutdown(s: SOCKET, how: c_int) c_int;
 
-pub extern "ws2_32" stdcallcc fn socket(af: u32, type_0: u32, protocol: u32) SOCKET;
+extern "ws2_32" stdcallcc fn WSASocketW(af: u32, sockType: u32, protocol: u32, lpProtocolInfo: ?*c_void, g: c_uint, dwFlags: u32) SOCKET;
+
+pub stdcallcc fn socket(af: u32, sockType: u32, protocol: u32) SOCKET {
+    return WSASocketW(af, sockType, protocol, null, 0, WSA_FLAG_OVERLAPPED);
+}
+
+// pub stdcallcc fn read(s: SOCKET, buf: [*]u8, count: usize) usize {
+//     return syscall3(SYS_read, @intCast(usize, fd), @ptrToInt(buf), count);
+// }
+
+pub stdcallcc fn readv(s: SOCKET, iov: [*]const iovec, count: usize) usize {
+    var read: u32 = 0;
+    var flags: u32 = 0;
+    return WSARecv(s, iov, count, &read, &flags, null, null);
+}
+
+// pub fn write(s: SOCKET, buf: [*]const u8, count: usize) usize {
+//     return syscall3(SYS_write, @intCast(usize, fd), @ptrToInt(buf), count);
+// }
 
 
+pub stdcallcc fn writev(s: SOCKET, iov: [*]const iovec_const, count: usize) usize {
+    var sent: u32 = 0;
+    return WSASend(s, iov, count, &sent, 0, null, null);
+}

@@ -1,6 +1,6 @@
 const std = @import("../index.zig");
 const builtin = @import("builtin");
-const os = @import("index.zig");
+const os = std.os;
 
 pub const sys = switch (builtin.os) {
     builtin.Os.windows => std.os.windows,
@@ -18,7 +18,7 @@ fn winGetErrno(_: usize) u32 {
     return @intCast(u32, sys.WSAGetLastError());
 }
 
-const getErrno = switch (builtin.os) {
+pub const getErrno = switch (builtin.os) {
     builtin.Os.windows => winGetErrno,
     builtin.Os.linux, builtin.Os.macosx => sys.getErrno,
     else => @compileError("unsupported os"),
@@ -191,7 +191,6 @@ pub const AcceptError = error{
     Unexpected,
 };
 
-//// TODO WINDOWS
 pub fn accept(socketfd: Socket, addr: *sys.sockaddr, flags: u32) AcceptError!Socket {
     while (true) {
         var sockaddr_size = u32(@sizeOf(sys.sockaddr));
@@ -220,7 +219,6 @@ pub fn accept(socketfd: Socket, addr: *sys.sockaddr, flags: u32) AcceptError!Soc
 }
 
 /// Returns -1 if would block.
-//// TODO WINDOWS
 pub fn asyncAccept(socketfd: Socket, addr: *sys.sockaddr, flags: u32) AcceptError!Socket {
     while (true) {
         var sockaddr_size = u32(@sizeOf(sys.sockaddr));
@@ -402,5 +400,14 @@ pub fn getSockOptConnectError(socketfd: Socket) ConnectError!void {
         sys.EINVAL => unreachable,
         sys.ENOPROTOOPT => unreachable, // The option is unknown at the level indicated.
         sys.ENOTSOCK => unreachable, // The file descriptor socket does not refer to a socket.
+    }
+}
+
+
+pub fn close(socketfd: Socket) void {
+    switch (builtin.os) {
+        builtin.Os.windows => sys.closesocket(socketfd),
+        builtin.Os.linux, builtin.Os.macosx => os.close(socketfd),
+        else => @compileError("unsupported os"),
     }
 }

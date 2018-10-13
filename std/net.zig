@@ -4,7 +4,7 @@ const assert = std.debug.assert;
 const net = @This();
 const mem = std.mem;
 
-pub const sys = switch (builtin.os) {
+const sys = switch (builtin.os) {
     builtin.Os.windows => std.os.windows,
     builtin.Os.linux, builtin.Os.macosx => std.os.posix,
     else => @compileError("unsupported os"),
