@@ -7,7 +7,7 @@ pub use @import("kernel32.zig");
 pub use @import("ntdll.zig");
 pub use @import("ole32.zig");
 pub use @import("shell32.zig");
-pub use @import("ws2_32.zig");
+pub use @import("ws2_32/index.zig");
 
 test "import" {
     _ = @import("util.zig");

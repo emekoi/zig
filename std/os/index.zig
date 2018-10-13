@@ -15,6 +15,7 @@ test "std.os" {
     _ = @import("get_user_id.zig");
     _ = @import("linux/index.zig");
     _ = @import("path.zig");
+    _ = @import("socket.zig");
     _ = @import("test.zig");
     _ = @import("time.zig");
     _ = @import("windows/index.zig");
@@ -34,6 +35,7 @@ pub const posix = switch (builtin.os) {
     else => @compileError("Unsupported OS"),
 };
 pub const net = @import("net.zig");
+pub const socket = @import("socket.zig");
 
 pub const ChildProcess = @import("child_process.zig").ChildProcess;
 pub const path = @import("path.zig");
@@ -2293,222 +2295,6 @@ pub fn supportsAnsiEscapeCodes(handle: FileHandle) bool {
     }
 }
 
-pub const PosixSocketError = error{
-    /// Permission to create a socket of the specified type and/or
-    /// pro‐tocol is denied.
-    PermissionDenied,
-
-    /// The implementation does not support the specified address family.
-    AddressFamilyNotSupported,
-
-    /// Unknown protocol, or protocol family not available.
-    ProtocolFamilyNotAvailable,
-
-    /// The per-process limit on the number of open file descriptors has been reached.
-    ProcessFdQuotaExceeded,
-
-    /// The system-wide limit on the total number of open files has been reached.
-    SystemFdQuotaExceeded,
-
-    /// Insufficient memory is available. The socket cannot be created until sufficient
-    /// resources are freed.
-    SystemResources,
-
-    /// The protocol type or the specified protocol is not supported within this domain.
-    ProtocolNotSupported,
-};
-
-pub fn posixSocket(domain: u32, socket_type: u32, protocol: u32) !i32 {
-    const rc = posix.socket(domain, socket_type, protocol);
-    const err = posix.getErrno(rc);
-    switch (err) {
-        0 => return @intCast(i32, rc),
-        posix.EACCES => return PosixSocketError.PermissionDenied,
-        posix.EAFNOSUPPORT => return PosixSocketError.AddressFamilyNotSupported,
-        posix.EINVAL => return PosixSocketError.ProtocolFamilyNotAvailable,
-        posix.EMFILE => return PosixSocketError.ProcessFdQuotaExceeded,
-        posix.ENFILE => return PosixSocketError.SystemFdQuotaExceeded,
-        posix.ENOBUFS, posix.ENOMEM => return PosixSocketError.SystemResources,
-        posix.EPROTONOSUPPORT => return PosixSocketError.ProtocolNotSupported,
-        else => return unexpectedErrorPosix(err),
-    }
-}
-
-pub const PosixBindError = error{
-    /// The address is protected, and the user is not the superuser.
-    /// For UNIX domain sockets: Search permission is denied on  a  component
-    /// of  the  path  prefix.
-    AccessDenied,
-
-    /// The given address is already in use, or in the case of Internet domain sockets,
-    /// The  port number was specified as zero in the socket
-    /// address structure, but, upon attempting to bind to  an  ephemeral  port,  it  was
-    /// determined  that  all  port  numbers in the ephemeral port range are currently in
-    /// use.  See the discussion of /proc/sys/net/ipv4/ip_local_port_range ip(7).
-    AddressInUse,
-
-    /// A nonexistent interface was requested or the requested address was not local.
-    AddressNotAvailable,
-
-    /// Too many symbolic links were encountered in resolving addr.
-    SymLinkLoop,
-
-    /// addr is too long.
-    NameTooLong,
-
-    /// A component in the directory prefix of the socket pathname does not exist.
-    FileNotFound,
-
-    /// Insufficient kernel memory was available.
-    SystemResources,
-
-    /// A component of the path prefix is not a directory.
-    NotDir,
-
-    /// The socket inode would reside on a read-only filesystem.
-    ReadOnlyFileSystem,
-
-    /// See https://github.com/ziglang/zig/issues/1396
-    Unexpected,
-};
-
-/// addr is `&const T` where T is one of the sockaddr
-pub fn posixBind(fd: i32, addr: *const posix.sockaddr) PosixBindError!void {
-    const rc = posix.bind(fd, addr, @sizeOf(posix.sockaddr));
-    const err = posix.getErrno(rc);
-    switch (err) {
-        0 => return,
-        posix.EACCES => return PosixBindError.AccessDenied,
-        posix.EADDRINUSE => return PosixBindError.AddressInUse,
-        posix.EBADF => unreachable, // always a race condition if this error is returned
-        posix.EINVAL => unreachable,
-        posix.ENOTSOCK => unreachable,
-        posix.EADDRNOTAVAIL => return PosixBindError.AddressNotAvailable,
-        posix.EFAULT => unreachable,
-        posix.ELOOP => return PosixBindError.SymLinkLoop,
-        posix.ENAMETOOLONG => return PosixBindError.NameTooLong,
-        posix.ENOENT => return PosixBindError.FileNotFound,
-        posix.ENOMEM => return PosixBindError.SystemResources,
-        posix.ENOTDIR => return PosixBindError.NotDir,
-        posix.EROFS => return PosixBindError.ReadOnlyFileSystem,
-        else => return unexpectedErrorPosix(err),
-    }
-}
-
-const PosixListenError = error{
-    /// Another socket is already listening on the same port.
-    /// For Internet domain sockets, the  socket referred to by sockfd had not previously
-    /// been bound to an address and, upon attempting to bind it to an ephemeral port, it
-    /// was determined that all port numbers in the ephemeral port range are currently in
-    /// use.  See the discussion of /proc/sys/net/ipv4/ip_local_port_range in ip(7).
-    AddressInUse,
-
-    /// The file descriptor sockfd does not refer to a socket.
-    FileDescriptorNotASocket,
-
-    /// The socket is not of a type that supports the listen() operation.
-    OperationNotSupported,
-
-    /// See https://github.com/ziglang/zig/issues/1396
-    Unexpected,
-};
-
-pub fn posixListen(sockfd: i32, backlog: u32) PosixListenError!void {
-    const rc = posix.listen(sockfd, backlog);
-    const err = posix.getErrno(rc);
-    switch (err) {
-        0 => return,
-        posix.EADDRINUSE => return PosixListenError.AddressInUse,
-        posix.EBADF => unreachable,
-        posix.ENOTSOCK => return PosixListenError.FileDescriptorNotASocket,
-        posix.EOPNOTSUPP => return PosixListenError.OperationNotSupported,
-        else => return unexpectedErrorPosix(err),
-    }
-}
-
-pub const PosixAcceptError = error{
-    ConnectionAborted,
-
-    /// The per-process limit on the number of open file descriptors has been reached.
-    ProcessFdQuotaExceeded,
-
-    /// The system-wide limit on the total number of open files has been reached.
-    SystemFdQuotaExceeded,
-
-    /// Not enough free memory.  This often means that the memory allocation  is  limited
-    /// by the socket buffer limits, not by the system memory.
-    SystemResources,
-
-    /// The file descriptor sockfd does not refer to a socket.
-    FileDescriptorNotASocket,
-
-    /// The referenced socket is not of type SOCK_STREAM.
-    OperationNotSupported,
-
-    ProtocolFailure,
-
-    /// Firewall rules forbid connection.
-    BlockedByFirewall,
-
-    /// See https://github.com/ziglang/zig/issues/1396
-    Unexpected,
-};
-
-pub fn posixAccept(fd: i32, addr: *posix.sockaddr, flags: u32) PosixAcceptError!i32 {
-    while (true) {
-        var sockaddr_size = u32(@sizeOf(posix.sockaddr));
-        const rc = posix.accept4(fd, addr, &sockaddr_size, flags);
-        const err = posix.getErrno(rc);
-        switch (err) {
-            0 => return @intCast(i32, rc),
-            posix.EINTR => continue,
-            else => return unexpectedErrorPosix(err),
-
-            posix.EAGAIN => unreachable, // use posixAsyncAccept for non-blocking
-            posix.EBADF => unreachable, // always a race condition
-            posix.ECONNABORTED => return PosixAcceptError.ConnectionAborted,
-            posix.EFAULT => unreachable,
-            posix.EINVAL => unreachable,
-            posix.EMFILE => return PosixAcceptError.ProcessFdQuotaExceeded,
-            posix.ENFILE => return PosixAcceptError.SystemFdQuotaExceeded,
-            posix.ENOBUFS => return PosixAcceptError.SystemResources,
-            posix.ENOMEM => return PosixAcceptError.SystemResources,
-            posix.ENOTSOCK => return PosixAcceptError.FileDescriptorNotASocket,
-            posix.EOPNOTSUPP => return PosixAcceptError.OperationNotSupported,
-            posix.EPROTO => return PosixAcceptError.ProtocolFailure,
-            posix.EPERM => return PosixAcceptError.BlockedByFirewall,
-        }
-    }
-}
-
-/// Returns -1 if would block.
-pub fn posixAsyncAccept(fd: i32, addr: *posix.sockaddr, flags: u32) PosixAcceptError!i32 {
-    while (true) {
-        var sockaddr_size = u32(@sizeOf(posix.sockaddr));
-        const rc = posix.accept4(fd, addr, &sockaddr_size, flags);
-        const err = posix.getErrno(rc);
-        switch (err) {
-            0 => return @intCast(i32, rc),
-            posix.EINTR => continue,
-            else => return unexpectedErrorPosix(err),
-
-            posix.EAGAIN => return -1,
-            posix.EBADF => unreachable, // always a race condition
-            posix.ECONNABORTED => return PosixAcceptError.ConnectionAborted,
-            posix.EFAULT => unreachable,
-            posix.EINVAL => unreachable,
-            posix.EMFILE => return PosixAcceptError.ProcessFdQuotaExceeded,
-            posix.ENFILE => return PosixAcceptError.SystemFdQuotaExceeded,
-            posix.ENOBUFS => return PosixAcceptError.SystemResources,
-            posix.ENOMEM => return PosixAcceptError.SystemResources,
-            posix.ENOTSOCK => return PosixAcceptError.FileDescriptorNotASocket,
-            posix.EOPNOTSUPP => return PosixAcceptError.OperationNotSupported,
-            posix.EPROTO => return PosixAcceptError.ProtocolFailure,
-            posix.EPERM => return PosixAcceptError.BlockedByFirewall,
-        }
-    }
-}
-
 pub const LinuxEpollCreateError = error{
     /// The  per-user   limit   on   the   number   of   epoll   instances   imposed   by
     /// /proc/sys/fs/epoll/max_user_instances  was encountered.  See epoll(7) for further
@@ -2627,7 +2413,12 @@ pub fn linuxEventFd(initval: u32, flags: u32) LinuxEventFdError!i32 {
     }
 }
 
+<<<<<<< HEAD
 pub const PosixGetSockNameError = error{
+=======
+<<<<<<< HEAD
+pub const PosixGetSockNameError = error.{
+>>>>>>> added socket module
     /// Insufficient resources were available in the system to perform the operation.
     SystemResources,
 
@@ -2784,7 +2575,14 @@ pub fn posixGetSockOptConnectError(sockfd: i32) PosixConnectError!void {
     }
 }
 
+<<<<<<< HEAD
 pub const Thread = struct {
+=======
+pub const Thread = struct.{
+=======
+pub const Thread = struct {
+>>>>>>> added socket module
+>>>>>>> added socket module
     data: Data,
 
     pub const use_pthreads = is_posix and builtin.link_libc;

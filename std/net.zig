@@ -6,8 +6,10 @@ const mem = std.mem;
 
 pub const sys = switch (builtin.os) {
     builtin.Os.windows => std.os.windows,
-    else => std.os.posix,
+    builtin.Os.linux, builtin.Os.macosx => std.os.posix,
+    else => @compileError("unsupported os"),
 };
+
 
 pub const OsAddress = sys.sockaddr;
 
