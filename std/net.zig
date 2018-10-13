@@ -2,28 +2,28 @@ const std = @import("index.zig");
 const builtin = @import("builtin");
 const assert = std.debug.assert;
 const net = @This();
-const posix = std.os.posix;
 const mem = std.mem;
 
-pub const TmpWinAddr = struct {
-    family: u8,
-    data: [14]u8,
+pub const sys = switch (builtin.os) {
+    builtin.Os.windows => std.os.windows,
+    else => std.os.posix,
 };
 
-pub const OsAddress = switch (builtin.os) {
-    builtin.Os.windows => TmpWinAddr,
-    else => posix.sockaddr,
-};
+pub const OsAddress = sys.sockaddr;
 
 pub const Address = struct {
     os_addr: OsAddress,
 
-    pub fn initIp4(ip4: u32, _port: u16) Address {
-        return Address{
-            .os_addr = posix.sockaddr{
-                .in = posix.sockaddr_in{
-                    .family = posix.AF_INET,
-                    .port = std.mem.endianSwapIfLe(u16, _port),
+    pub fn init(addr: *const OsAddress) Address {
+        return Address{ .os_addr = addr.* };
+    }
+
+    pub fn initIp4(ip4: u32, port: u16) Address {
+        return Address {
+            .os_addr = sys.sockaddr {
+                .in = sys.sockaddr_in {
+                    .family = sys.AF_INET,
+                    .port = std.mem.endianSwapIfLe(u16, port),
                     .addr = ip4,
                     .zero = []u8{0} ** 8,
                 },
@@ -31,13 +31,12 @@ pub const Address = struct {
         };
     }
 
-    pub fn initIp6(ip6: *const Ip6Addr, _port: u16) Address {
-        return Address{
-            .family = posix.AF_INET6,
-            .os_addr = posix.sockaddr{
-                .in6 = posix.sockaddr_in6{
-                    .family = posix.AF_INET6,
-                    .port = std.mem.endianSwapIfLe(u16, _port),
+    pub fn initIp6(ip6: *const Ip6Addr, port: u16) Address {
+        return Address {
+            .os_addr = sys.sockaddr {
+                .in6 = sys.sockaddr_in6 {
+                    .family = sys.AF_INET6,
+                    .port = std.mem.endianSwapIfLe(u16, port),
                     .flowinfo = 0,
                     .addr = ip6.addr,
                     .scope_id = ip6.scope_id,
@@ -46,26 +45,25 @@ pub const Address = struct {
         };
     }
 
-    pub fn port(self: Address) u16 {
-        return std.mem.endianSwapIfLe(u16, self.os_addr.in.port);
-    }
-
-    pub fn initPosix(addr: posix.sockaddr) Address {
-        return Address{ .os_addr = addr };
-    }
-
-    pub fn format(self: *const Address, out_stream: var) !void {
+     pub fn format(
+        self: *const Address,
+        comptime fmt: []const u8,
+        context: var,
+        comptime FmtError: type,
+        output: fn (@typeOf(context), []const u8) FmtError!void,
+    ) FmtError!void {
         switch (self.os_addr.in.family) {
-            posix.AF_INET => {
+            sys.AF_INET => {
                 const native_endian_port = std.mem.endianSwapIfLe(u16, self.os_addr.in.port);
-                const bytes = ([]const u8)((*self.os_addr.in.addr)[0..1]);
-                try out_stream.print("{}.{}.{}.{}:{}", bytes[0], bytes[1], bytes[2], bytes[3], native_endian_port);
+                const bytes = @ptrCast([*]const u8, &self.os_addr.in.addr);
+                return std.fmt.format(context, FmtError, output, "{}.{}.{}.{}:{}",
+                    bytes[0], bytes[1], bytes[2], bytes[3], native_endian_port);
             },
-            posix.AF_INET6 => {
+            sys.AF_INET6 => {
                 const native_endian_port = std.mem.endianSwapIfLe(u16, self.os_addr.in6.port);
-                try out_stream.print("[TODO render ip6 address]:{}", native_endian_port);
+                return std.fmt.format(context, FmtError, output, "[TODO render ip6 address]:{}", native_endian_port);
             },
-            else => try out_stream.write("(unrecognized address family)"),
+            else => return std.fmt.format(context, FmtError, output, "(unrecognized address family)"),
         }
     }
 };
