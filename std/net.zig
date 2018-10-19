@@ -17,13 +17,13 @@ pub const Address = struct {
     os_addr: OsAddress,
 
     pub fn init(addr: *const OsAddress) Address {
-        return Address{ .os_addr = addr.* };
+        return Address.{ .os_addr = addr.* };
     }
 
     pub fn initIp4(ip4: u32, port: u16) Address {
-        return Address {
-            .os_addr = sys.sockaddr {
-                .in = sys.sockaddr_in {
+        return Address.{
+            .os_addr = sys.sockaddr.{
+                .in = sys.sockaddr_in.{
                     .family = sys.AF_INET,
                     .port = std.mem.endianSwapIfLe(u16, port),
                     .addr = ip4,
@@ -34,9 +34,9 @@ pub const Address = struct {
     }
 
     pub fn initIp6(ip6: *const Ip6Addr, port: u16) Address {
-        return Address {
-            .os_addr = sys.sockaddr {
-                .in6 = sys.sockaddr_in6 {
+        return Address.{
+            .os_addr = sys.sockaddr.{
+                .in6 = sys.sockaddr_in6.{
                     .family = sys.AF_INET6,
                     .port = std.mem.endianSwapIfLe(u16, port),
                     .flowinfo = 0,

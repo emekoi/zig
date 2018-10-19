@@ -23,14 +23,14 @@ pub const Server = struct {
 
     pub fn init(loop: *Loop) Server {
         // TODO can't initialize handler coroutine here because we need well defined copy elision
-        return Server {
+        return Server.{
             .loop = loop,
             .sockfd = null,
             .accept_coro = null,
             .handleRequestFn = undefined,
             .waiting_for_emfile_node = undefined,
             .listen_address = undefined,
-            .listen_resume_node = event.Loop.ResumeNode {
+            .listen_resume_node = event.Loop.ResumeNode.{
                 .id = event.Loop.ResumeNode.Id.Basic,
                 .handle = undefined,
                 .overlapped = event.Loop.ResumeNode.overlapped_init,
@@ -130,7 +130,7 @@ pub async fn connectUnixSocket(loop: *Loop, path: []const u8) !i32 {
     );
     errdefer socket.close(sockfd);
 
-    var sock_addr = socket.sys.sockaddr_un {
+    var sock_addr = socket.sys.sockaddr_un.{
         .family = socket.sys.AF_UNIX,
         .path = undefined,
     };
@@ -159,7 +159,7 @@ pub const ReadError = error{
 
 /// returns number of bytes read. 0 means EOF.
 pub async fn read(loop: *std.event.Loop, fd: socket.Socket, buffer: []u8) ReadError!usize {
-    const iov = socket.sys.iovec{
+    const iov = socket.sys.iovec.{
         .iov_base = buffer.ptr,
         .iov_len = buffer.len,
     };
@@ -170,7 +170,7 @@ pub async fn read(loop: *std.event.Loop, fd: socket.Socket, buffer: []u8) ReadEr
 pub const WriteError = error{};
 
 pub async fn write(loop: *std.event.Loop, fd: socket.Socket, buffer: []const u8) WriteError!void {
-    const iov = socket.sys.iovec_const{
+    const iov = socket.sys.iovec_const.{
         .iov_base = buffer.ptr,
         .iov_len = buffer.len,
     };
@@ -339,7 +339,7 @@ async fn doAsyncTest(loop: *Loop, address: *const std.net.Address, server: *Serv
     server.close();
 }
 
-pub const OutStream = struct {
+pub const OutStream = struct.{
     fd: socket.Socket,
     stream: Stream,
     loop: *Loop,
@@ -348,7 +348,7 @@ pub const OutStream = struct {
     pub const Stream = event.io.OutStream(Error);
 
     pub fn init(loop: *Loop, fd: socket.Socket) OutStream {
-        return OutStream{
+        return OutStream.{
             .fd = fd,
             .loop = loop,
             .stream = Stream{ .writeFn = writeFn },
@@ -361,7 +361,7 @@ pub const OutStream = struct {
     }
 };
 
-pub const InStream = struct {
+pub const InStream = struct.{
     fd: socket.Socket,
     stream: Stream,
     loop: *Loop,
@@ -370,7 +370,7 @@ pub const InStream = struct {
     pub const Stream = event.io.InStream(Error);
 
     pub fn init(loop: *Loop, fd: socket.Socket) InStream {
-        return InStream{
+        return InStream.{
             .fd = fd,
             .loop = loop,
             .stream = Stream{ .readFn = readFn },
