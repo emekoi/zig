@@ -182,7 +182,22 @@ pub extern "kernel32" stdcallcc fn GetProcAddress(hModule: HMODULE, lpProcName: 
 
 pub extern "kernel32" stdcallcc fn FreeLibrary(hModule: HMODULE) BOOL;
 
-pub const FILE_NOTIFY_INFORMATION = extern struct {
+pub extern "kernel32" stdcallcc GetConsoleScreenBufferInfo(
+    hConsoleOutput: HANDLE,
+    lpConsoleScreenBufferInfo: *CONSOLE_SCREEN_BUFFER_INFO
+): WINBOOL;
+
+pub extern "kernel32" stdcallcc GetConsoleCursorInfo(
+    hConsoleOutput: HANDLE,
+    lpConsoleCursorInfo: *CONSOLE_CURSOR_INFO
+): WINBOOL;
+      
+pub extern "kernel32" stdcallcc SetConsoleCursorInfo(
+    hConsoleOutput: HANDLE,
+    lpConsoleCursorInfo: *const CONSOLE_CURSOR_INFO
+): WINBOOL;
+
+pub const FILE_NOTIFY_INFORMATION = extern struct.{
     NextEntryOffset: DWORD,
     Action: DWORD,
     FileNameLength: DWORD,
@@ -216,7 +231,27 @@ pub const CONSOLE_SCREEN_BUFFER_INFO = extern struct {
     dwMaximumWindowSize: COORD,
 };
 
-pub const FOREGROUND_BLUE = 1;
-pub const FOREGROUND_GREEN = 2;
-pub const FOREGROUND_RED = 4;
-pub const FOREGROUND_INTENSITY = 8;
+pub const CONSOLE_CURSOR_INFO = extern struct.{
+    dwSize: DWORD,
+    bVisible: WINBOOL
+};
+
+const FOREGROUND_BLACK = 0;
+const FOREGROUND_BLUE = 1;
+const FOREGROUND_GREEN = 2;
+const FOREGROUND_AQUA= 3;
+const FOREGROUND_RED = 4;
+const FOREGROUND_PURPLE = 5;
+const FOREGROUND_YELLOW = 6;
+const FOREGROUND_WHITE = 7;
+const FOREGROUND_INTENSITY = 8;
+
+const BACKGROUND_BLACK = FOREGROUND_BLACK << 4;
+const BACKGROUND_BLUE = FOREGROUND_BLUE << 4;
+const BACKGROUND_GREEN = FOREGROUND_GREEN << 4;
+const BACKGROUND_AQUA= FOREGROUND_AQUA << 4;
+const BACKGROUND_RED = FOREGROUND_RED << 4;
+const BACKGROUND_PURPLE = FOREGROUND_PURPLE << 4;
+const BACKGROUND_YELLOW = FOREGROUND_YELLOW << 4;
+const BACKGROUND_WHITE = FOREGROUND_WHITE << 4;
+const BACKGROUND_INTENSITY = FOREGROUND_INTENSITY << 4;
