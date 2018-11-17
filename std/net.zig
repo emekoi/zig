@@ -4,13 +4,13 @@ const assert = std.debug.assert;
 const net = @This();
 const mem = std.mem;
 
-const sys = switch (builtin.os) {
+const impl = switch (builtin.os) {
     builtin.Os.windows => std.os.windows,
     builtin.Os.linux, builtin.Os.macosx => std.os.posix,
     else => @compileError("unsupported os"),
 };
 
-pub const OsAddress = sys.sockaddr;
+pub const OsAddress = impl.sockaddr;
 
 pub const Address = struct {
     os_addr: OsAddress,
@@ -21,9 +21,9 @@ pub const Address = struct {
 
     pub fn initIp4(ip4: u32, _port: u16) Address {
         return Address {
-            .os_addr = sys.sockaddr {
-                .in = sys.sockaddr_in {
-                    .family = sys.AF_INET,
+            .os_addr = impl.sockaddr {
+                .in = impl.sockaddr_in {
+                    .family = impl.AF_INET,
                     .port = std.mem.endianSwapIfLe(u16, _port),
                     .addr = ip4,
                     .zero = []u8{0} ** 8,
@@ -34,9 +34,9 @@ pub const Address = struct {
 
     pub fn initIp6(ip6: *const Ip6Addr, _port: u16) Address {
         return Address {
-            .os_addr = sys.sockaddr {
-                .in6 = sys.sockaddr_in6 {
-                    .family = sys.AF_INET6,
+            .os_addr = impl.sockaddr {
+                .in6 = impl.sockaddr_in6 {
+                    .family = impl.AF_INET6,
                     .port = std.mem.endianSwapIfLe(u16, _port),
                     .flowinfo = 0,
                     .addr = ip6.addr,
@@ -58,13 +58,13 @@ pub const Address = struct {
         output: fn (@typeOf(context), []const u8) FmtError!void,
     ) FmtError!void {
         switch (self.os_addr.in.family) {
-            sys.AF_INET => {
+            impl.AF_INET => {
                 const native_endian_port = std.mem.endianSwapIfLe(u16, self.os_addr.in.port);
                 const bytes = @ptrCast([*]const u8, &self.os_addr.in.addr);
                 return std.fmt.format(context, FmtError, output, "{} {} {} {}:{}",
                     bytes[0], bytes[1], bytes[2], bytes[3], native_endian_port);
             },
-            sys.AF_INET6 => {
+            impl.AF_INET6 => {
                 const native_endian_port = std.mem.endianSwapIfLe(u16, self.os_addr.in6.port);
                 return std.fmt.format(context, FmtError, output, "[TODO render ip6 address]:{}", native_endian_port);
             },

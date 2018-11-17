@@ -5,8 +5,13 @@ const event = std.event;
 const mem = std.mem;
 const os = std.os;
 const socket = os.socket;
-// const posix = os.posix;
 const Loop = std.event.Loop;
+
+const impl = switch (builtin.os) {
+    builtin.Os.windows => std.os.windows,
+    builtin.Os.linux, builtin.Os.macosx => std.os.posix,
+    else => @compileError("unsupported os"),
+};
 
 pub const Server = struct {
     handleRequestFn: async<*mem.Allocator> fn (*Server, *const std.net.Address, os.File) void,
@@ -45,12 +50,12 @@ pub const Server = struct {
     ) !void {
         self.handleRequestFn = handleRequestFn;
 
-        const sockfd = try socket.socket(socket.sys.AF_INET, socket.sys.SOCK_STREAM | socket.sys.SOCK_CLOEXEC | socket.sys.SOCK_NONBLOCK, socket.sys.PROTO_tcp);
+        const sockfd = try socket.socket(impl.AF_INET, impl.SOCK_STREAM | impl.SOCK_CLOEXEC | impl.SOCK_NONBLOCK, impl.PROTO_tcp);
         errdefer socket.close(sockfd);
         self.sockfd = sockfd;
 
         try socket.bind(sockfd, &address.os_addr);
-        try socket.listen(sockfd, socket.sys.SOMAXCONN);
+        try socket.listen(sockfd, impl.SOMAXCONN);
         self.listen_address = std.net.Address.init(try socket.getSockName(sockfd));
 
         self.accept_coro = try async<self.loop.allocator> Server.handler(self);
@@ -86,7 +91,7 @@ pub const Server = struct {
         while (true) {
             var accepted_addr: std.net.Address = undefined;
             // TODO just inline the following function here and don't expose it as posixAsyncAccept
-            if (socket.asyncAccept(self.sockfd.?, &accepted_addr.os_addr, socket.sys.SOCK_NONBLOCK | socket.sys.SOCK_CLOEXEC)) |accepted_fd| {
+            if (socket.asyncAccept(self.sockfd.?, &accepted_addr.os_addr, impl.SOCK_NONBLOCK | impl.SOCK_CLOEXEC)) |accepted_fd| {
                 if (accepted_fd == -1) {
                     // would block
                     suspend; // we will get resumed by epoll_wait in the event loop
@@ -124,22 +129,22 @@ pub const Server = struct {
 pub async fn connectUnixSocket(loop: *Loop, path: []const u8) !i32 {
     if (builtin.os == builtin.Os.window) @compileError("unsupported on this system");
     const sockfd = try socket.socket(
-        socket.sys.AF_UNIX,
-        socket.sys.SOCK_STREAM | socket.sys.SOCK_CLOEXEC | socket.sys.SOCK_NONBLOCK,
+        impl.AF_UNIX,
+        impl.SOCK_STREAM | impl.SOCK_CLOEXEC | impl.SOCK_NONBLOCK,
         0,
     );
     errdefer socket.close(sockfd);
 
-    var sock_addr = socket.sys.sockaddr_un {
-        .family = socket.sys.AF_UNIX,
+    var sock_addr = impl.sockaddr_un {
+        .family = impl.AF_UNIX,
         .path = undefined,
     };
 
     if (path.len > @typeOf(sock_addr.path).len) return error.NameTooLong;
     mem.copy(u8, sock_addr.path[0..], path);
-    const size = @intCast(u32, @sizeOf(socket.sys.sa_family_t) + path.len);
+    const size = @intCast(u32, @sizeOf(impl.sa_family_t) + path.len);
     try socket.connectAsync(sockfd, &sock_addr, size);
-    try await try async loop.linuxWaitFd(sockfd, socket.sys.EPOLLIN | socket.sys.EPOLLOUT | socket.sys.EPOLLET);
+    try await try async loop.linuxWaitFd(sockfd, impl.EPOLLIN | impl.EPOLLOUT | impl.EPOLLET);
     try socket.getSockOptConnectError(sockfd);
 
     return sockfd;
@@ -159,22 +164,22 @@ pub const ReadError = error{
 
 /// returns number of bytes read. 0 means EOF.
 pub async fn read(loop: *std.event.Loop, fd: socket.Socket, buffer: []u8) ReadError!usize {
-    const iov = socket.sys.iovec {
+    const iov = impl.iovec {
         .iov_base = buffer.ptr,
         .iov_len = buffer.len,
     };
-    const iovs: *const [1]socket.sys.iovec = &iov;
+    const iovs: *const [1]impl.iovec = &iov;
     return await (async readv(loop, fd, iovs, 1) catch unreachable);
 }
 
 pub const WriteError = error{};
 
 pub async fn write(loop: *std.event.Loop, fd: socket.Socket, buffer: []const u8) WriteError!void {
-    const iov = socket.sys.iovec_const {
+    const iov = impl.iovec_const {
         .iov_base = buffer.ptr,
         .iov_len = buffer.len,
     };
-    const iovs: *const [1]socket.sys.iovec_const = &iov;
+    const iovs: *const [1]impl.iovec_const = &iov;
     return await (async writev(loop, fd, iovs, 1) catch unreachable);
 }
 
