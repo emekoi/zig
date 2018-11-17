@@ -2295,7 +2295,7 @@ pub fn supportsAnsiEscapeCodes(handle: FileHandle) bool {
     }
 }
 
-pub const LinuxEpollCreateError = error.{
+pub const LinuxEpollCreateError = error {
     /// The  per-user   limit   on   the   number   of   epoll   instances   imposed   by
     /// /proc/sys/fs/epoll/max_user_instances  was encountered.  See epoll(7) for further
     /// details.
@@ -2418,7 +2418,7 @@ pub fn linuxEventFd(initval: u32, flags: u32) LinuxEventFdError!i32 {
 pub const PosixGetSockNameError = error{
 =======
 <<<<<<< HEAD
-pub const PosixGetSockNameError = error.{
+pub const PosixGetSockNameError = error {
 >>>>>>> added socket module
     /// Insufficient resources were available in the system to perform the operation.
     SystemResources,
@@ -2579,13 +2579,13 @@ pub fn posixGetSockOptConnectError(sockfd: i32) PosixConnectError!void {
 <<<<<<< HEAD
 pub const Thread = struct {
 =======
-pub const Thread = struct.{
+pub const Thread = struct {
 =======
 pub const Thread = struct {
 >>>>>>> added socket module
 >>>>>>> added socket module
 =======
-pub const Thread = struct.{
+pub const Thread = struct {
 >>>>>>> fixed syntax
     data: Data,
 

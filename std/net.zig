@@ -10,22 +10,21 @@ const sys = switch (builtin.os) {
     else => @compileError("unsupported os"),
 };
 
-
 pub const OsAddress = sys.sockaddr;
 
 pub const Address = struct {
     os_addr: OsAddress,
 
     pub fn init(addr: *const OsAddress) Address {
-        return Address.{ .os_addr = addr.* };
+        return Address { .os_addr = addr.* };
     }
 
-    pub fn initIp4(ip4: u32, port: u16) Address {
-        return Address.{
-            .os_addr = sys.sockaddr.{
-                .in = sys.sockaddr_in.{
+    pub fn initIp4(ip4: u32, _port: u16) Address {
+        return Address {
+            .os_addr = sys.sockaddr {
+                .in = sys.sockaddr_in {
                     .family = sys.AF_INET,
-                    .port = std.mem.endianSwapIfLe(u16, port),
+                    .port = std.mem.endianSwapIfLe(u16, _port),
                     .addr = ip4,
                     .zero = []u8{0} ** 8,
                 },
@@ -33,18 +32,22 @@ pub const Address = struct {
         };
     }
 
-    pub fn initIp6(ip6: *const Ip6Addr, port: u16) Address {
-        return Address.{
-            .os_addr = sys.sockaddr.{
-                .in6 = sys.sockaddr_in6.{
+    pub fn initIp6(ip6: *const Ip6Addr, _port: u16) Address {
+        return Address {
+            .os_addr = sys.sockaddr {
+                .in6 = sys.sockaddr_in6 {
                     .family = sys.AF_INET6,
-                    .port = std.mem.endianSwapIfLe(u16, port),
+                    .port = std.mem.endianSwapIfLe(u16, _port),
                     .flowinfo = 0,
                     .addr = ip6.addr,
                     .scope_id = ip6.scope_id,
                 },
             },
         };
+    }
+
+    pub fn port(self: Address) u16 {
+        return std.mem.endianSwapIfLe(u16, self.os_addr.in.port);
     }
 
      pub fn format(
@@ -58,7 +61,7 @@ pub const Address = struct {
             sys.AF_INET => {
                 const native_endian_port = std.mem.endianSwapIfLe(u16, self.os_addr.in.port);
                 const bytes = @ptrCast([*]const u8, &self.os_addr.in.addr);
-                return std.fmt.format(context, FmtError, output, "{}.{}.{}.{}:{}",
+                return std.fmt.format(context, FmtError, output, "{} {} {} {}:{}",
                     bytes[0], bytes[1], bytes[2], bytes[3], native_endian_port);
             },
             sys.AF_INET6 => {
