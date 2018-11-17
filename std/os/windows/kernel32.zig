@@ -197,7 +197,7 @@ pub extern "kernel32" stdcallcc SetConsoleCursorInfo(
     lpConsoleCursorInfo: *const CONSOLE_CURSOR_INFO
 ): WINBOOL;
 
-pub const FILE_NOTIFY_INFORMATION = extern struct.{
+pub const FILE_NOTIFY_INFORMATION = extern struct {
     NextEntryOffset: DWORD,
     Action: DWORD,
     FileNameLength: DWORD,
@@ -231,7 +231,7 @@ pub const CONSOLE_SCREEN_BUFFER_INFO = extern struct {
     dwMaximumWindowSize: COORD,
 };
 
-pub const CONSOLE_CURSOR_INFO = extern struct.{
+pub const CONSOLE_CURSOR_INFO = extern struct {
     dwSize: DWORD,
     bVisible: WINBOOL
 };

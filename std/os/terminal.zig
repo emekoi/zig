@@ -46,7 +46,7 @@ const OutStream = os.File.OutStream;
 // [ ] getch
 // [x] reset
 
-pub const Color = enum.{
+pub const Color = enum {
     Black,
     Blue,
     Green,
@@ -57,21 +57,21 @@ pub const Color = enum.{
     White,
 };
 
-pub const Attribute = enum.{
+pub const Attribute = enum {
     Bright,
     Reversed,
     Underlined,
 };
 
-pub const Mode = enum.{
+pub const Mode = enum {
     ForeGround,
     BackGround,
 };
 
-pub const Terminal = struct.{
+pub const Terminal = struct {
     const Self = @This();
 
-    const Error = error.{
+    const Error = error {
         InvalidFile,
         InvalidMode,
     };
@@ -97,7 +97,7 @@ pub const Terminal = struct.{
             return error.InvalidFile;
         }
 
-        return Self.{
+        return Self {
             .file = file,
             .file_stream = file.outStream(),
             .out_stream = null,
