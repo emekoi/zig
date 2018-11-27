@@ -2153,3 +2153,37 @@ fn getDebugInfoAllocator() *mem.Allocator {
     debug_info_allocator = &debug_info_arena_allocator.allocator;
     return &debug_info_arena_allocator.allocator;
 }
+
+stdcallcc fn windowsSegfaultHandler(ExceptionInfo: *windows.EXCEPTION_POINTERS) c_long {
+    if (ExceptionInfo.ExceptionRecord.ExceptionCode == windows.EXCEPTION_ACCESS_VIOLATION) {
+        const exception_address = @ptrToInt(ExceptionInfo.ExceptionRecord.ExceptionAddress);
+        panicExtra(null, exception_address, "Segmentation Fault");
+    } else {
+        return std.os.windows.EXCEPTION_CONTINUE_SEARCH;
+    }
+}
+
+extern fn posixSegfautHandler(signal: i32) void {
+    // TODO find out how to get stack trace using async-signal-safe-functions
+    // http://man7.org/linux/man-pages/man7/signal.7.html
+    // http://man7.org/linux/man-pages/man7/signal-safety.7.html
+    panic("Segmentation Fault");
+}
+
+pub fn enableSegfaultStackTracing() void  {
+    switch (builtin.os) {
+        builtin.Os.windows => {
+            _ = windows.AddVectoredExceptionHandler(0, windowsSegfaultHandler);
+        },
+        builtin.Os.linux,
+        builtin.Os.macosx => {
+            const act = os.posix.Sigaction {
+                .handler = posixSegfautHandler,
+                .mask = os.posix.empty_sigset,
+                .flags = os.SA_NODEFER,
+            };
+            os.posix.sigaction(os.posix.SIGSEGV, &act, null);
+        },
+        else => @compileError("unsupported OS"),
+    }
+}

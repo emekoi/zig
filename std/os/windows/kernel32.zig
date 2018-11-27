@@ -220,3 +220,24 @@ pub const FOREGROUND_BLUE = 1;
 pub const FOREGROUND_GREEN = 2;
 pub const FOREGROUND_RED = 4;
 pub const FOREGROUND_INTENSITY = 8;
+
+pub const EXCEPTION_ACCESS_VIOLATION = 0xc0000005;
+pub const EXCEPTION_CONTINUE_SEARCH = 0;
+
+pub const EXCEPTION_RECORD = extern struct {
+    ExceptionCode: DWORD,
+    ExceptionFlags: DWORD,
+    ExceptionRecord: *EXCEPTION_RECORD,
+    ExceptionAddress: *c_void,
+    NumberParameters: DWORD,
+    ExceptionInformation: [15]ULONG_PTR,
+};
+
+pub const EXCEPTION_POINTERS = extern struct {
+    ExceptionRecord: *EXCEPTION_RECORD,
+    ContextRecord: *c_void,
+};
+
+pub const VECTORED_EXCEPTION_HANDLER = stdcallcc fn(ExceptionInfo: *EXCEPTION_POINTERS) c_long;
+
+pub extern "kernel32" stdcallcc fn AddVectoredExceptionHandler(First: c_ulong, Handler: ?VECTORED_EXCEPTION_HANDLER) ?*c_void;
