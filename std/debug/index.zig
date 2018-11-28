@@ -2180,7 +2180,7 @@ pub fn enableSegfaultStackTracing() void  {
             const act = os.posix.Sigaction {
                 .handler = posixSegfautHandler,
                 .mask = os.posix.empty_sigset,
-                .flags = os.SA_NODEFER,
+                .flags = os.posix.SA_NODEFER,
             };
             os.posix.sigaction(os.posix.SIGSEGV, &act, null);
         },
