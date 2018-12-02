@@ -1,6 +1,6 @@
 use @import("index.zig");
 
-pub extern "kernel32" stdcallcc fn CancelIoEx(hFile: HANDLE, lpOverlapped: LPOVERLAPPED) BOOL;
+pub extern "kernel32" stdcallcc fn CancelIoEx(hFile: HANDLE, lpOverlapped: *OVERLAPPED) BOOL;
 
 pub extern "kernel32" stdcallcc fn CloseHandle(hObject: HANDLE) BOOL;
 
@@ -136,7 +136,7 @@ pub extern "kernel32" stdcallcc fn ReadDirectoryChangesW(
     dwNotifyFilter: DWORD,
     lpBytesReturned: ?*DWORD,
     lpOverlapped: ?*OVERLAPPED,
-    lpCompletionRoutine: LPOVERLAPPED_COMPLETION_ROUTINE,
+    lpCompletionRoutine: OVERLAPPED_COMPLETION_ROUTINE,
 ) BOOL;
 
 pub extern "kernel32" stdcallcc fn ReadFile(
@@ -174,7 +174,7 @@ pub extern "kernel32" stdcallcc fn WriteFile(
     in_out_lpOverlapped: ?*OVERLAPPED,
 ) BOOL;
 
-pub extern "kernel32" stdcallcc fn WriteFileEx(hFile: HANDLE, lpBuffer: [*]const u8, nNumberOfBytesToWrite: DWORD, lpOverlapped: LPOVERLAPPED, lpCompletionRoutine: LPOVERLAPPED_COMPLETION_ROUTINE) BOOL;
+pub extern "kernel32" stdcallcc fn WriteFileEx(hFile: HANDLE, lpBuffer: [*]const u8, nNumberOfBytesToWrite: DWORD, lpOverlapped: *OVERLAPPED, lpCompletionRoutine: OVERLAPPED_COMPLETION_ROUTINE) BOOL;
 
 pub extern "kernel32" stdcallcc fn LoadLibraryW(lpLibFileName: [*]const u16) ?HMODULE;
 
@@ -195,7 +195,7 @@ pub const FILE_ACTION_MODIFIED = 0x00000003;
 pub const FILE_ACTION_RENAMED_OLD_NAME = 0x00000004;
 pub const FILE_ACTION_RENAMED_NEW_NAME = 0x00000005;
 
-pub const LPOVERLAPPED_COMPLETION_ROUTINE = ?extern fn (DWORD, DWORD, *OVERLAPPED) void;
+pub const OVERLAPPED_COMPLETION_ROUTINE = ?extern fn (DWORD, DWORD, *OVERLAPPED) void;
 
 pub const FILE_LIST_DIRECTORY = 1;
 

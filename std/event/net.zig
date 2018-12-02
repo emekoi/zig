@@ -4,14 +4,25 @@ const assert = std.debug.assert;
 const event = std.event;
 const mem = std.mem;
 const os = std.os;
-const posix = os.posix;
+const socket = os.socket;
 const Loop = std.event.Loop;
 
+const sys = switch (builtin.os) {
+    builtin.Os.windows => os.windows,
+    else => os.posix,
+};
+
+const is_windows = builtin.os == Os.windows;
+const is_posix = switch (builtin.os) {
+    builtin.Os.linux, builtin.Os.macosx, builtin.Os.freebsd => true,
+    else => false,
+};
+
 pub const Server = struct {
-    handleRequestFn: async<*mem.Allocator> fn (*Server, *const std.net.Address, os.File) void,
+    handleRequestFn: async<*mem.Allocator> fn (*Server, *const std.net.Address, socket.SocketFd) void,
 
     loop: *Loop,
-    sockfd: ?i32,
+    sockfd: ?socket.SocketFd,
     accept_coro: ?promise,
     listen_address: std.net.Address,
 
@@ -22,7 +33,7 @@ pub const Server = struct {
 
     pub fn init(loop: *Loop) Server {
         // TODO can't initialize handler coroutine here because we need well defined copy elision
-        return Server{
+        return Server {
             .loop = loop,
             .sockfd = null,
             .accept_coro = null,
@@ -40,47 +51,50 @@ pub const Server = struct {
     pub fn listen(
         self: *Server,
         address: *const std.net.Address,
-        handleRequestFn: async<*mem.Allocator> fn (*Server, *const std.net.Address, os.File) void,
+        handleRequestFn: async<*mem.Allocator> fn (*Server, *const std.net.Address, socket.SocketFd) void,
     ) !void {
         self.handleRequestFn = handleRequestFn;
 
-        const sockfd = try os.posixSocket(posix.AF_INET, posix.SOCK_STREAM | posix.SOCK_CLOEXEC | posix.SOCK_NONBLOCK, posix.PROTO_tcp);
-        errdefer os.close(sockfd);
+        const sockfd = try socket.socket(sys.AF_INET, sys.SOCK_STREAM | sys.SOCK_CLOEXEC | sys.SOCK_NONBLOCK, sys.PROTO_tcp);
+        errdefer socket.close(sockfd);
         self.sockfd = sockfd;
 
-        try os.posixBind(sockfd, &address.os_addr);
-        try os.posixListen(sockfd, posix.SOMAXCONN);
-        self.listen_address = std.net.Address.initPosix(try os.posixGetSockName(sockfd));
+        try socket.bind(sockfd, &address.os_addr);
+        try socket.listen(sockfd, sys.SOMAXCONN);
+        self.listen_address = std.net.Address.init(try socket.getSockName(sockfd));
 
         self.accept_coro = try async<self.loop.allocator> Server.handler(self);
         errdefer cancel self.accept_coro.?;
 
         self.listen_resume_node.handle = self.accept_coro.?;
+        /// TODO
         try self.loop.linuxAddFd(sockfd, &self.listen_resume_node, posix.EPOLLIN | posix.EPOLLOUT | posix.EPOLLET);
         errdefer self.loop.removeFd(sockfd);
     }
 
     /// Stop listening
     pub fn close(self: *Server) void {
+        /// TODO
         self.loop.linuxRemoveFd(self.sockfd.?);
-        os.close(self.sockfd.?);
+        socket.close(self.sockfd.?);
     }
 
     pub fn deinit(self: *Server) void {
         if (self.accept_coro) |accept_coro| cancel accept_coro;
-        if (self.sockfd) |sockfd| os.close(sockfd);
+        if (self.sockfd) |sockfd| socket.close(sockfd);
     }
 
     pub async fn handler(self: *Server) void {
         while (true) {
             var accepted_addr: std.net.Address = undefined;
             // TODO just inline the following function here and don't expose it as posixAsyncAccept
-            if (os.posixAsyncAccept(self.sockfd.?, &accepted_addr.os_addr, posix.SOCK_NONBLOCK | posix.SOCK_CLOEXEC)) |accepted_fd| {
-                if (accepted_fd == -1) {
+            if (socket.asyncAccept(self.sockfd.?, &accepted_addr.os_addr, sys.SOCK_NONBLOCK | sys.SOCK_CLOEXEC)) |accepted_fd| {
+                if (accepted_fd == socket.InvalidSocket) {
                     // would block
                     suspend; // we will get resumed by epoll_wait in the event loop
                     continue;
                 }
+                /// TODO
                 var socket = os.File.openHandle(accepted_fd);
                 _ = async<self.loop.allocator> self.handleRequestFn(self, &accepted_addr, socket) catch |err| switch (err) {
                     error.OutOfMemory => {
@@ -110,30 +124,30 @@ pub const Server = struct {
     }
 };
 
-pub async fn connectUnixSocket(loop: *Loop, path: []const u8) !i32 {
-    const sockfd = try os.posixSocket(
-        posix.AF_UNIX,
-        posix.SOCK_STREAM | posix.SOCK_CLOEXEC | posix.SOCK_NONBLOCK,
+pub async fn connectUnixSocket(loop: *Loop, path: []const u8) !SocketFd {
+    const sockfd = try socket.socket(
+        sys.AF_UNIX,
+        sys.SOCK_STREAM | sys.SOCK_CLOEXEC | sys.SOCK_NONBLOCK,
         0,
     );
-    errdefer os.close(sockfd);
+    errdefer socket.close(sockfd);
 
-    var sock_addr = posix.sockaddr_un{
-        .family = posix.AF_UNIX,
+    var sock_addr = sys.sockaddr_un {
+        .family = sys.AF_UNIX,
         .path = undefined,
     };
 
     if (path.len > @typeOf(sock_addr.path).len) return error.NameTooLong;
     mem.copy(u8, sock_addr.path[0..], path);
-    const size = @intCast(u32, @sizeOf(posix.sa_family_t) + path.len);
-    try os.posixConnectAsync(sockfd, &sock_addr, size);
-    try await try async loop.linuxWaitFd(sockfd, posix.EPOLLIN | posix.EPOLLOUT | posix.EPOLLET);
-    try os.posixGetSockOptConnectError(sockfd);
+    const size = @intCast(u32, @sizeOf(sys.sa_family_t) + path.len);
+    try socket.connectAsync(sockfd, &sock_addr, size);
+    try await try async loop.linuxWaitFd(sockfd, sys.EPOLLIN | sys.EPOLLOUT | sys.EPOLLET);
+    try socket.getSockOptConnectError(sockfd);
 
     return sockfd;
 }
 
-pub const ReadError = error{
+pub const ReadError = error {
     SystemResources,
     Unexpected,
     UserResourceLimitReached,
@@ -146,27 +160,35 @@ pub const ReadError = error{
 };
 
 /// returns number of bytes read. 0 means EOF.
-pub async fn read(loop: *std.event.Loop, fd: os.FileHandle, buffer: []u8) ReadError!usize {
-    const iov = posix.iovec{
-        .iov_base = buffer.ptr,
-        .iov_len = buffer.len,
-    };
-    const iovs: *const [1]posix.iovec = &iov;
-    return await (async readvPosix(loop, fd, iovs, 1) catch unreachable);
+pub async fn read(loop: *std.event.Loop, fd: socket.SocketFd, buffer: []u8) ReadError!usize {
+    if (is_posix) {
+        const iov = sys.iovec {
+            .iov_base = buffer.ptr,
+            .iov_len = buffer.len,
+        };
+        const iovs: *const [1]sys.iovec = &iov;
+        return await (async readvPosix(loop, fd, iovs, 1) catch unreachable);
+    } else {
+        // TODO
+    }
 }
 
 pub const WriteError = error{};
 
-pub async fn write(loop: *std.event.Loop, fd: os.FileHandle, buffer: []const u8) WriteError!void {
-    const iov = posix.iovec_const{
-        .iov_base = buffer.ptr,
-        .iov_len = buffer.len,
-    };
-    const iovs: *const [1]posix.iovec_const = &iov;
-    return await (async writevPosix(loop, fd, iovs, 1) catch unreachable);
+pub async fn write(loop: *std.event.Loop, fd: socket.SocketFd, buffer: []const u8) WriteError!void {
+    if (is_posix) {
+        const iov = posix.iovec_const {
+            .iov_base = buffer.ptr,
+            .iov_len = buffer.len,
+        };
+        const iovs: *const [1]posix.iovec_const = &iov;
+        return await (async writevPosix(loop, fd, iovs, 1) catch unreachable);
+    } else {
+        // TODO
+    }
 }
 
-pub async fn writevPosix(loop: *Loop, fd: i32, iov: [*]const posix.iovec_const, count: usize) !void {
+pub async fn writevPosix(loop: *Loop, fd: socket.SocketFd, iov: [*]const sys.iovec_const, count: usize) !void {
     while (true) {
         switch (builtin.os) {
             builtin.Os.macosx, builtin.Os.linux => {
@@ -174,22 +196,22 @@ pub async fn writevPosix(loop: *Loop, fd: i32, iov: [*]const posix.iovec_const, 
                 const err = posix.getErrno(rc);
                 switch (err) {
                     0 => return,
-                    posix.EINTR => continue,
-                    posix.ESPIPE => unreachable,
-                    posix.EINVAL => unreachable,
-                    posix.EFAULT => unreachable,
-                    posix.EAGAIN => {
-                        try await (async loop.linuxWaitFd(fd, posix.EPOLLET | posix.EPOLLOUT) catch unreachable);
+                    sys.EINTR => continue,
+                    sys.ESPIPE => unreachable,
+                    sys.EINVAL => unreachable,
+                    sys.EFAULT => unreachable,
+                    sys.EAGAIN => {
+                        try await (async loop.linuxWaitFd(fd, sys.EPOLLET | sys.EPOLLOUT) catch unreachable);
                         continue;
                     },
-                    posix.EBADF => unreachable, // always a race condition
-                    posix.EDESTADDRREQ => unreachable, // connect was never called
-                    posix.EDQUOT => unreachable,
-                    posix.EFBIG => unreachable,
-                    posix.EIO => return error.InputOutput,
-                    posix.ENOSPC => unreachable,
-                    posix.EPERM => return error.AccessDenied,
-                    posix.EPIPE => unreachable,
+                    sys.EBADF => unreachable, // always a race condition
+                    sys.EDESTADDRREQ => unreachable, // connect was never called
+                    sys.EDQUOT => unreachable,
+                    sys.EFBIG => unreachable,
+                    sys.EIO => return error.InputOutput,
+                    sys.ENOSPC => unreachable,
+                    sys.EPERM => return error.AccessDenied,
+                    sys.EPIPE => unreachable,
                     else => return os.unexpectedErrorPosix(err),
                 }
             },
@@ -199,26 +221,26 @@ pub async fn writevPosix(loop: *Loop, fd: i32, iov: [*]const posix.iovec_const, 
 }
 
 /// returns number of bytes read. 0 means EOF.
-pub async fn readvPosix(loop: *std.event.Loop, fd: i32, iov: [*]posix.iovec, count: usize) !usize {
+pub async fn readvPosix(loop: *std.event.Loop, fd: socket.SocketFd, iov: [*]sys.iovec, count: usize) !usize {
     while (true) {
         switch (builtin.os) {
             builtin.Os.linux, builtin.Os.freebsd, builtin.Os.macosx => {
-                const rc = posix.readv(fd, iov, count);
-                const err = posix.getErrno(rc);
+                const rc = sys.readv(fd, iov, count);
+                const err = sys.getErrno(rc);
                 switch (err) {
                     0 => return rc,
-                    posix.EINTR => continue,
-                    posix.EINVAL => unreachable,
-                    posix.EFAULT => unreachable,
-                    posix.EAGAIN => {
-                        try await (async loop.linuxWaitFd(fd, posix.EPOLLET | posix.EPOLLIN) catch unreachable);
+                    sys.EINTR => continue,
+                    sys.EINVAL => unreachable,
+                    sys.EFAULT => unreachable,
+                    sys.EAGAIN => {
+                        try await (async loop.linuxWaitFd(fd, sys.EPOLLET | sys.EPOLLIN) catch unreachable);
                         continue;
                     },
-                    posix.EBADF => unreachable, // always a race condition
-                    posix.EIO => return error.InputOutput,
-                    posix.EISDIR => unreachable,
-                    posix.ENOBUFS => return error.SystemResources,
-                    posix.ENOMEM => return error.SystemResources,
+                    sys.EBADF => unreachable, // always a race condition
+                    sys.EIO => return error.InputOutput,
+                    sys.EISDIR => unreachable,
+                    sys.ENOBUFS => return error.SystemResources,
+                    sys.ENOMEM => return error.SystemResources,
                     else => return os.unexpectedErrorPosix(err),
                 }
             },
@@ -227,44 +249,51 @@ pub async fn readvPosix(loop: *std.event.Loop, fd: i32, iov: [*]posix.iovec, cou
     }
 }
 
-pub async fn writev(loop: *Loop, fd: os.FileHandle, data: []const []const u8) !void {
-    const iovecs = try loop.allocator.alloc(os.posix.iovec_const, data.len);
-    defer loop.allocator.free(iovecs);
+pub async fn writev(loop: *Loop, fd: socket.SocketFd, data: []const []const u8) !void {
+    if (is_posix) {
+        const iovecs = try loop.allocator.alloc(sys.iovec_const, data.len);
+        defer loop.allocator.free(iovecs);
 
-    for (data) |buf, i| {
-        iovecs[i] = os.posix.iovec_const{
-            .iov_base = buf.ptr,
-            .iov_len = buf.len,
-        };
+        for (data) |buf, i| {
+            iovecs[i] = os.posix.iovec_const {
+                .iov_base = buf.ptr,
+                .iov_len = buf.len,
+            };
+        }
+
+        return await (async writevPosix(loop, fd, iovecs.ptr, data.len) catch unreachable);    
+    } else {
+        // TODO
     }
-
-    return await (async writevPosix(loop, fd, iovecs.ptr, data.len) catch unreachable);
 }
 
-pub async fn readv(loop: *Loop, fd: os.FileHandle, data: []const []u8) !usize {
-    const iovecs = try loop.allocator.alloc(os.posix.iovec, data.len);
-    defer loop.allocator.free(iovecs);
+pub async fn readv(loop: *Loop, fd: socket.SocketFd, data: []const []u8) !usize {
+    if (is_posix) {
+        const iovecs = try loop.allocator.alloc(sys.iovec, data.len);
+        defer loop.allocator.free(iovecs);
 
-    for (data) |buf, i| {
-        iovecs[i] = os.posix.iovec{
-            .iov_base = buf.ptr,
-            .iov_len = buf.len,
-        };
+        for (data) |buf, i| {
+            iovecs[i] = sys.iovec {
+                .iov_base = buf.ptr,
+                .iov_len = buf.len,
+            };
+        }
+
+        return await (async readvPosix(loop, fd, iovecs.ptr, data.len) catch unreachable);
     }
-
-    return await (async readvPosix(loop, fd, iovecs.ptr, data.len) catch unreachable);
 }
 
-pub async fn connect(loop: *Loop, _address: *const std.net.Address) !os.File {
+pub async fn connect(loop: *Loop, _address: *const std.net.Address) !socket.SocketFd {
     var address = _address.*; // TODO https://github.com/ziglang/zig/issues/1592
 
-    const sockfd = try os.posixSocket(posix.AF_INET, posix.SOCK_STREAM | posix.SOCK_CLOEXEC | posix.SOCK_NONBLOCK, posix.PROTO_tcp);
-    errdefer os.close(sockfd);
+    const sockfd = try socket.socket(sys.AF_INET, sys.SOCK_STREAM | sys.SOCK_CLOEXEC | sys.SOCK_NONBLOCK, sys.PROTO_tcp);
+    errdefer socket.close(sockfd);
 
-    try os.posixConnectAsync(sockfd, &address.os_addr, @sizeOf(posix.sockaddr_in));
-    try await try async loop.linuxWaitFd(sockfd, posix.EPOLLIN | posix.EPOLLOUT | posix.EPOLLET);
-    try os.posixGetSockOptConnectError(sockfd);
-
+    try socket.connectAsync(sockfd, &address.os_addr, @sizeOf(sys.sockaddr_in));
+    // TODO
+    try await try async loop.linuxWaitFd(sockfd, sys.EPOLLIN | sys.EPOLLOUT | sys.EPOLLET);
+    try socket.getSockOptConnectError(sockfd);
+    // TODO
     return os.File.openHandle(sockfd);
 }
 
@@ -328,18 +357,18 @@ async fn doAsyncTest(loop: *Loop, address: *const std.net.Address, server: *Serv
 }
 
 pub const OutStream = struct {
-    fd: os.FileHandle,
+    fd: socket.SocketFd,
     stream: Stream,
     loop: *Loop,
 
     pub const Error = WriteError;
     pub const Stream = event.io.OutStream(Error);
 
-    pub fn init(loop: *Loop, fd: os.FileHandle) OutStream {
-        return OutStream{
+    pub fn init(loop: *Loop, fd: socket.SocketFd) OutStream {
+        return OutStream {
             .fd = fd,
             .loop = loop,
-            .stream = Stream{ .writeFn = writeFn },
+            .stream = Stream { .writeFn = writeFn },
         };
     }
 
@@ -350,18 +379,18 @@ pub const OutStream = struct {
 };
 
 pub const InStream = struct {
-    fd: os.FileHandle,
+    fd: socket.SocketFd,
     stream: Stream,
     loop: *Loop,
 
     pub const Error = ReadError;
     pub const Stream = event.io.InStream(Error);
 
-    pub fn init(loop: *Loop, fd: os.FileHandle) InStream {
-        return InStream{
+    pub fn init(loop: *Loop, fd: socket.SocketFd) InStream {
+        return InStream {
             .fd = fd,
             .loop = loop,
-            .stream = Stream{ .readFn = readFn },
+            .stream = Stream { .readFn = readFn },
         };
     }
 

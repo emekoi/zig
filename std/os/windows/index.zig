@@ -74,7 +74,6 @@ pub const OVERLAPPED = extern struct {
     OffsetHigh: DWORD,
     hEvent: ?HANDLE,
 };
-pub const LPOVERLAPPED = *OVERLAPPED;
 
 pub const MAX_PATH = 260;
 
