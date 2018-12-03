@@ -2,7 +2,12 @@ use @import("index.zig");
 
 pub const AF_UNSPEC = 0;
 pub const AF_INET = 2;
+pub const AF_IPX = 6;
+pub const AF_APPLETALK = 16;
+pub const AF_NETBIOS = 17;
 pub const AF_INET6 = 23;
+pub const AF_IRDA = 26;
+pub const AF_BTH = 32;
 
 pub const SD_RECEIVE = 0;
 pub const SD_SEND = 1;
@@ -25,15 +30,19 @@ pub const SO_BROADCAST = 0x0020;
 pub const SO_RCVTIMEO = 0x1006;
 pub const SO_SNDTIMEO = 0x1005;
 pub const SO_REUSEADDR = 0x0004;
+pub const SO_ERROR = 0x1007;
 
+pub const IPPROTO_ICMP = 1;
+pub const IPPROTO_IGMP = 2;
+pub const BTHPROTO_RFCOMM = 3;
 pub const IPPROTO_TCP = 6;
 pub const IPPROTO_UDP = 17;
+pub const IPPROTO_ICMPV6 = 58;
 pub const IPPROTO_RM = 113;
 
 pub const TCP_NODELAY = 0x0001;
 
 // pub const IP_TTL = 4;
-// pub const SO_ERROR = 0x1007;
 
 // pub const IP_MULTICAST_TTL = 10;
 // pub const IP_MULTICAST_LOOP = 11;
@@ -66,7 +75,7 @@ pub const OVERLAPPED_COMPLETION_ROUTINE = stdcallcc fn(
 
 pub const in_port_t = c_ushort;
 pub const sa_family_t = c_ushort;
-pub const socklen_t = c_ulong;
+pub const socklen_t = c_int;
 
 pub const sockaddr = extern union {
     in: sockaddr_in,
@@ -76,7 +85,7 @@ pub const sockaddr = extern union {
 pub const sockaddr_in = extern struct {
     family: sa_family_t,
     port: in_port_t,
-    addr: u32,
+    addr: DWORD,
     zero: [8]u8,
 };
 
@@ -133,9 +142,9 @@ pub extern "ws2_32" stdcallcc fn getnameinfo(
     pSockaddr: *const sockaddr,
     SockaddrLength: socklen_t,
     pNodeBuffer: [*]u8,
-    NodeBufferSize: u32,
+    NodeBufferSize: DWORD,
     pServiceBuffer: [*]u8,
-    ServiceBufferSize: u32,
+    ServiceBufferSize: DWORD,
     Flags: c_int,
 ) c_int;
 
@@ -162,27 +171,25 @@ pub extern "ws2_32" stdcallcc fn WSAGetLastError() c_int;
 
 pub extern "ws2_32" stdcallcc fn WSAStartup(wVersionRequired: WORD, lpWSAData: *WSAData) c_int;
 
-pub extern "ws2_32" stdcallcc fn getsockname(s: SOCKET, name: ?*sockaddr, namelen: ?*c_int) c_int;
+pub extern "ws2_32" stdcallcc fn getsockname(s: SOCKET, name: ?*sockaddr, namelen: ?*socklen_t) c_int;
 
-pub extern "ws2_32" stdcallcc fn getpeername(s: SOCKET, name: ?*sockaddr, namelen: ?*c_int) c_int;
+pub extern "ws2_32" stdcallcc fn getpeername(s: SOCKET, name: ?*sockaddr, namelen: ?*socklen_t) c_int;
 
-// we really should't do this
-// pub extern "ws2_32" stdcallcc fn socket(af: c_int, @"type": c_int, protocol: c_int) SOCKET;
-pub extern "ws2_32" stdcallcc fn socket(af: u32, @"type": u32, protocol: u32) SOCKET;
+pub extern "ws2_32" stdcallcc fn socket(af: c_int, @"type": c_int, protocol: c_int) SOCKET;
 
 pub extern "ws2_32" stdcallcc fn setsockopt(s: SOCKET, level: c_int, optname: c_int, optval: ?[*]const u8, optlen: c_int) c_int;
 
 pub extern "ws2_32" stdcallcc fn getsockopt(s: SOCKET, level: c_int, optname: c_int, optval: ?[*]u8, optlen: ?*c_int) c_int;
 
-pub extern "ws2_32" stdcallcc fn connect(s: SOCKET, name: ?*const sockaddr, namelen: c_int) c_int;
+pub extern "ws2_32" stdcallcc fn connect(s: SOCKET, name: ?*const sockaddr, namelen: socklen_t) c_int;
 
 pub extern "ws2_32" stdcallcc fn recvfrom(s: SOCKET, buf: ?[*]u8, len: c_int, flags: c_int, from: ?*sockaddr, fromlen: ?*c_int) c_int;
 
 pub extern "ws2_32" stdcallcc fn shutdown(s: SOCKET, how: c_int) c_int;
 
-pub extern "ws2_32" stdcallcc fn bind(s: SOCKET, addr: *const sockaddr, namelen: c_int) c_int;
+pub extern "ws2_32" stdcallcc fn bind(s: SOCKET, addr: *const sockaddr, namelen: socklen_t) c_int;
 
-pub extern "ws2_32" stdcallcc fn listen(s: SOCKET, backlog: u32) c_int;
+pub extern "ws2_32" stdcallcc fn listen(s: SOCKET, backlog: c_int) c_int;
 
 pub extern "ws2_32" stdcallcc fn sendto(s: SOCKET, buf: ?[*]const u8, len: c_int, flags: c_int, to: ?*const sockaddr, tolen: c_int) c_int;
 
@@ -205,6 +212,15 @@ pub extern "ws2_32" stdcallcc fn recv(s: SOCKET, buf: ?[*]u8, len: c_int, flags:
 // pub extern "ws2_32" stdcallcc fn inet_ntop(Family: c_int, pAddr: *const c_void, pStringBuf: [*]u8, StringBufSize: c_ulong) ?[*]u8;
 // pub extern "ws2_32" stdcallcc fn select(nfds: c_int, readfds: ?*fd_set, writefds: ?*fd_set, exceptfds: ?*fd_set, timeout: ?*const struct_timeval) c_int;
 
+// pub extern "ws2_32" stdcallcc fn WSASocketW(
+//     af: c_int,
+//     @"type": c_int,
+//     protocol: c_int,
+//     lpProtocolInfo: ?*c_void,
+//     g: c_uint,
+//     dwFlags: DWORD,
+// ) SOCKET;
+
 pub extern "ws2_32" stdcallcc fn WSASendMsg(
     s: SOCKET,
     lpMsg: *WSAMSG,
@@ -225,9 +241,9 @@ pub extern "ws2_32" stdcallcc fn WSARecvMsg(
 pub extern "ws2_32" stdcallcc fn WSARecvFrom(
     s: SOCKET,
     lpBuffers: [*]WSABuf,
-    dwBufferCount: u32,
-    lpNumberOfBytesSent: *u32,
-    lpFlags: *u32,
+    dwBufferCount: DWORD,
+    lpNumberOfBytesSent: *DWORD,
+    lpFlags: *DWORD,
     lpFrom: *sockaddr,
     lpFromlen: *c_int,
     lpOverlapped: ?*OVERLAPPED,
@@ -237,9 +253,9 @@ pub extern "ws2_32" stdcallcc fn WSARecvFrom(
 pub extern "ws2_32" stdcallcc fn WSASendTo(
     s: SOCKET,
     lpBuffers: [*]WSABuf,
-    dwBufferCount: u32,
-    lpNumberOfBytesSent: *u32,
-    dwFlags: u32, lpTo: *const sockaddr,
+    dwBufferCount: DWORD,
+    lpNumberOfBytesSent: *DWORD,
+    dwFlags: DWORD, lpTo: *const sockaddr,
     iTolen: c_int, lpOverlapped: *OVERLAPPED,
     lpCompletionRoutine: ?OVERLAPPED_COMPLETION_ROUTINE
 ) c_int;
@@ -247,9 +263,9 @@ pub extern "ws2_32" stdcallcc fn WSASendTo(
 pub extern "ws2_32" stdcallcc fn WSASend(
     s: SOCKET,
     lpBuffers: [*]WSABufConst,
-    dwBufferCount: u32,
-    lpNumberOfBytesSent: *u32,
-    dwFlags: u32,
+    dwBufferCount: DWORD,
+    lpNumberOfBytesSent: *DWORD,
+    dwFlags: DWORD,
     lpOverlapped: ?*OVERLAPPED,
     lpCompletionRoutine: ?OVERLAPPED_COMPLETION_ROUTINE
 ) c_int;
@@ -257,9 +273,9 @@ pub extern "ws2_32" stdcallcc fn WSASend(
 pub extern "ws2_32" stdcallcc fn WSARecv(
     s: SOCKET,
     lpBuffers: [*]WSABuf,
-    dwBufferCount: u32,
-    lpNumberOfBytesRecvd: *u32,
-    lpFlags: *u32,
+    dwBufferCount: DWORD,
+    lpNumberOfBytesRecvd: *DWORD,
+    lpFlags: *DWORD,
     lpOverlapped: ?*OVERLAPPED,
     lpCompletionRoutine: ?OVERLAPPED_COMPLETION_ROUTINE
 ) c_int;
