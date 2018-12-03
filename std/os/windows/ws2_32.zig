@@ -66,13 +66,6 @@ pub const INVALID_SOCKET = ~SOCKET(0);
 
 pub const SOCKET = usize;
 
-pub const OVERLAPPED_COMPLETION_ROUTINE = stdcallcc fn(
-    dwError: u16,
-    cbTransferred: u16,
-    lpOverlapped: *OVERLAPPED,
-    dwFlags: u16
-) void;
-
 pub const in_port_t = c_ushort;
 pub const sa_family_t = c_ushort;
 pub const socklen_t = c_int;

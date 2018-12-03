@@ -229,13 +229,13 @@ fn accept4Windows(fd: SocketFd, addr: ?*sys.sockaddr, addrlen: ?*sys.socklen_t, 
 pub const Socket = struct {
     fd: SocketFd,
 
-    pub fn new(domain: Domain, socket_type: SocketType, protocol: Protocol) {
+    pub fn new(domain: Domain, socket_type: SocketType, protocol: Protocol) Socket {
         const rc = sys.socket(@enumToInt(domain), @enumToInt(socket_type), @enumToInt(protocol));
 
         if (is_posix) {
             const err = sys.getErrno(rc);
             switch (err) {
-                0 => return @intCast(SocketFd, rc),
+                0 => return Socket { .fd = @intCast(SocketFd, rc) },
                 sys.EACCES => return SocketError.PermissionDenied,
                 sys.EAFNOSUPPORT => return SocketError.AddressFamilyNotSupported,
                 sys.EINVAL => return SocketError.ProtocolFamilyNotAvailable,
@@ -249,7 +249,7 @@ pub const Socket = struct {
             const err = sys.WSAGetLastError();
             // TODO check for TOO_MANY_OPEN_FILES?
             switch (err) {
-                0 => return rc,
+                0 => return  Socket { .fd = rc },
                 sys.WSAEACCES => return SocketError.PermissionDenied,
                 sys.WSAEAFNOSUPPORT => return SocketError.AddressFamilyNotSupported,
                 sys.WSAEINVAL => return SocketError.ProtocolFamilyNotAvailable,
