@@ -23,7 +23,7 @@ pub const SocketFd = switch (builtin.os) {
     else => i32,
 };
 
-pub const InvalidSocket: SocketFd = switch (builtin.os) {
+pub const InvalidSocketFd: SocketFd = switch (builtin.os) {
     builtin.Os.windows => sys.INVALID_SOCKET,
     else => -1,
 };
@@ -43,12 +43,19 @@ pub const SocketType = enum {
 };
 
 pub const Protocol = enum {
+    Unix = 0,
     TCP = if (is_posix) sys.PROTO_tcp else sys.IPPROTO_TCP,
     UDP = if (is_posix) sys.PROTO_udp else sys.IPPROTO_UDP,
     IP = if (is_posix) sys.PROTO_ip else sys.IPPROTO_IP,
     IPV6 = if (is_posix) sys.PROTO_ipv6 else sys.IPPROTO_IPV6,
     RAW = if (is_posix) sys.PROTO_raw else sys.IPPROTO_RAW,
     ICMP = if (is_posix) sys.PROTO_icmp else sys.IPPROTO_ICMP,
+};
+
+pub const Shutdown = enum {
+    Read,
+    Write,
+    Both,
 };
 
 pub const SocketError = error {
@@ -208,20 +215,25 @@ pub const ConnectError = error {
     Unexpected,
 };
 
-fn accept4Windows(fd: SocketFd, addr: ?*sys.sockaddr, addrlen: ?*sys.socklen_t, flags: u32) SocketFd {
-    // TODO: support other ioctl commands
-    // https://www.winsocketdotnetworkprogramming.com/winsock2programming/winsock2advancedsocketoptionioctl7b.html
-    // https://docs.microsoft.com/en-us/windows/desktop/winsock/summary-of-socket-ioctl-opcodes-2
-    // https://docs.microsoft.com/en-us/windows/desktop/winsock/winsock-ioctls
-    
-    const result = sys.accept(fd, addr, @ptrCast(*c_int, addrlen));
-    const mode = @boolToInt((@intCast(c_ulong, flags) & sys.FIONBIO) == sys.FIONBIO);
+pub const ShutdownError = error {
 
-    if (sys.ioctlsocket(result, sys.FIONBIO, &@intCast(c_int, mode)) != 0) {
-        return InvalidSocket;
+};
+
+fn accept4Windows(fd: SocketFd, addr: ?*sys.sockaddr, addrlen: ?*sys.socklen_t, flags: u32) SocketFd {
+    const result = sys.accept(fd, addr, @ptrCast(*c_int, addrlen));
+    const ioctl_mode = @boolToInt((@intCast(c_ulong, flags) & sys.FIONBIO) == sys.FIONBIO);
+    const no_inherit = (flags & sys.WSA_FLAG_NO_HANDLE_INHERIT);
+
+    if (sys.ioctlsocket(result, sys.FIONBIO, &@intCast(c_int, ioctl_mode)) != 0) {
+        return InvalidSocketFd;
     }
 
-    // WSA_FLAG_NO_HANDLE_INHERIT
+    if (no_inherit = sys.WSA_FLAG_NO_HANDLE_INHERIT) {
+        const handle = @intToPtr(sys.HANDLE, result);
+        if (sys.SetHandleInformation(handle, sys.HANDLE_FLAG_INHERIT, 0) == sys.FALSE) {
+            return InvalidSocketFd;
+        }
+    }
 
     return result;
 }
@@ -229,7 +241,7 @@ fn accept4Windows(fd: SocketFd, addr: ?*sys.sockaddr, addrlen: ?*sys.socklen_t, 
 pub const Socket = struct {
     fd: SocketFd,
 
-    pub fn new(domain: Domain, socket_type: SocketType, protocol: Protocol) Socket {
+    pub fn new(domain: Domain, socket_type: SocketType, protocol: Protocol) SocketError!Socket {
         const rc = sys.socket(@enumToInt(domain), @enumToInt(socket_type), @enumToInt(protocol));
 
         if (is_posix) {
@@ -259,6 +271,18 @@ pub const Socket = struct {
                 else => return unexpectedError(err),
             }
         }
+    }
+
+    pub fn tcp(domain: Domain) SocketError!Socket {
+        return Socket.new(domain, SocketType.Stream, Protocol.TCP);
+    }
+
+    pub fn udp(domain: Domain) SocketError!Socket {
+        return Socket.new(domain, SocketType.DataGram, Protocol.UDP);
+    }
+
+    pub fn unix(socket_type: SocketType) SocketError!Socket {
+        return Socket.new(Domain.Unix, socket_type, Protocol.Unix);
     }
 
     /// addr is `*const T` where T is one of the sockaddr
@@ -362,7 +386,13 @@ pub const Socket = struct {
                 const rc = accept4Windows(fd, addr, &sockaddr_size, flags);
                 const err = sys.WSAGetLastError();
                 switch (err) {
-                    0 => return Socket { .fd = rc },
+                    0 => {
+                        if (rc == InvalidSocketFd) {
+                            return unexpectedError(sys.GetLastError());
+                        } else {
+                            return Socket { .fd = rc };
+                        }
+                    },
                     sys.EINTR => continue,
                     else => return unexpectedError(err),
                     // TODO check for TOO_MANY_OPEN_FILES?
@@ -383,7 +413,7 @@ pub const Socket = struct {
         }
     }
 
-    /// Returns InvalidSocket if would block.
+    /// Returns InvalidSocketFd if would block.
     pub fn asyncAccept(self: Self, addr: *sys.sockaddr, flags: u32) AcceptError!Socket {
         if (is_posix) {
             while (true) {
@@ -394,7 +424,7 @@ pub const Socket = struct {
                     0 => return Socket { .fd = @intCast(SocketFd, rc) },
                     sys.EINTR => continue,
                     else => return unexpectedError(err),
-                    sys.EAGAIN  => return InvalidSocket,
+                    sys.EAGAIN  => return InvalidSocketFd,
                     sys.EBADF => unreachable, // always a race condition
                     sys.ECONNABORTED => return AcceptError.ConnectionAborted,
                     sys.EFAULT => unreachable,
@@ -419,7 +449,7 @@ pub const Socket = struct {
                     0 => return Socket { .fd = rc },
                     sys.WSAEINTR => continue,
                     else => return unexpectedError(err),
-                    sys.WSAEWOULDBLOCK  => return InvalidSocket,
+                    sys.WSAEWOULDBLOCK  => return InvalidSocketFd,
                     sys.WSAEBADF => unreachable, // always a race condition
                     sys.WSAECONNABORTED => return AcceptError.ConnectionAborted,
                     sys.WSAEFAULT => unreachable,
@@ -639,6 +669,10 @@ pub const Socket = struct {
                 sys.WSAENOTSOCK => unreachable, // The file descriptor socket does not refer to a socket.
             }
         }
+    }
+
+    pub fn shutdown(self: Socket) !void {
+
     }
 
     pub fn close(self: Socket) void {
