@@ -1,6 +1,7 @@
 use @import("index.zig");
 
 pub const AF_UNSPEC = 0;
+pub const AF_UNIX = 1;
 pub const AF_INET = 2;
 pub const AF_IPX = 6;
 pub const AF_APPLETALK = 16;
@@ -25,20 +26,53 @@ pub const WSA_FLAG_NO_HANDLE_INHERIT = 0x80;
 pub const SOL_SOCKET = 0xffff;
 pub const SOMAXCONN = 0x7fffffff;
 
-pub const SO_BROADCAST = 0x0020;
+pub const SO_ACCEPTCONN = 2;
+pub const SO_BROADCAST = 32;
+pub const SO_CONNDATA = 28672;
+pub const SO_CONNDATALEN = 28676;
+pub const SO_CONNECT_TIME = 28684;
+pub const SO_CONNOPT = 28673;
+pub const SO_CONNOPTLEN = 28677;
+pub const SO_DEBUG = 1;
+pub const SO_DISCDATA = 28674;
+pub const SO_DISCDATALEN = 28678;
+pub const SO_DISCOPT = 28675;
+pub const SO_DISCOPTLEN = 28679;
+pub const SO_DONTROUTE = 16;
+pub const SO_ERROR = 4103;
+pub const SO_KEEPALIVE = 8;
+pub const SO_LINGER = 128;
+pub const SO_MAXDG = 28681;
+pub const SO_MAXPATHDG = 28682;
+pub const SO_OOBINLINE = 256;
+pub const SO_OPENTYPE = 28680;
+pub const SO_RCVBUF = 4098;
+pub const SO_RCVLOWAT = 4100;
+pub const SO_RCVTIMEO = 4102;
+pub const SO_REUSEADDR = 4;
+pub const SO_SNDBUF = 4097;
+pub const SO_SNDLOWAT = 4099;
+pub const SO_SNDTIMEO = 4101;
+pub const SO_SYNCHRONOUS_ALERT = 16;
+pub const SO_SYNCHRONOUS_NONALERT = 32;
+pub const SO_TYPE = 4104;
+pub const SO_UPDATE_ACCEPT_CONTEXT = 28683;
+pub const SO_USELOOPBACK = 64;
 
-pub const SO_RCVTIMEO = 0x1006;
-pub const SO_SNDTIMEO = 0x1005;
-pub const SO_REUSEADDR = 0x0004;
-pub const SO_ERROR = 0x1007;
-
+pub const IPPROTO_IP = 0;
 pub const IPPROTO_ICMP = 1;
 pub const IPPROTO_IGMP = 2;
 pub const BTHPROTO_RFCOMM = 3;
+pub const IPPROTO_IPV4 = 4;
 pub const IPPROTO_TCP = 6;
+pub const IPPROTO_PUP = 12;
 pub const IPPROTO_UDP = 17;
+pub const IPPROTO_IDP = 22;
+pub const IPPROTO_IPV6 = 41;
 pub const IPPROTO_ICMPV6 = 58;
+pub const IPPROTO_ND = 77;
 pub const IPPROTO_RM = 113;
+pub const IPPROTO_RAW = 255;
 
 pub const TCP_NODELAY = 0x0001;
 
@@ -197,7 +231,6 @@ pub extern "ws2_32" stdcallcc fn send(s: SOCKET, buf: ?[*]const u8, len: c_int, 
 pub extern "ws2_32" stdcallcc fn recv(s: SOCKET, buf: ?[*]u8, len: c_int, flags: c_int) c_int;
 
 // TODO delete these?
-// pub extern "ws2_32" stdcallcc fn gethostname(name: ?[*]u8, namelen: c_int) c_int;
 // pub extern "ws2_32" stdcallcc fn getprotobyname(name: ?[*]const u8) ?*struct_protoent;
 // pub extern "ws2_32" stdcallcc fn getprotobynumber(proto: c_int) ?*struct_protoent;
 // pub extern "ws2_32" stdcallcc fn getservbyname(name: ?[*]const u8, proto: ?[*]const u8) ?*struct_servent;
