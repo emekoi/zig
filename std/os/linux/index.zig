@@ -345,9 +345,8 @@ pub const SCM_TIMESTAMPING_PKTINFO = 58;
 pub const SO_PEERGROUPS = 59;
 pub const SO_ZEROCOPY = 60;
 
-pub const SOL_SOCKET = 1;
-
 pub const SOL_IP = 0;
+pub const SOL_SOCKET = 1;
 pub const SOL_IPV6 = 41;
 pub const SOL_ICMPV6 = 58;
 

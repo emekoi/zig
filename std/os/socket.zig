@@ -9,6 +9,7 @@ const sys = switch (builtin.os) {
 };
 
 const is_windows = builtin.os == Os.windows;
+
 const is_posix = switch (builtin.os) {
     builtin.Os.linux, builtin.Os.macosx, builtin.Os.freebsd => true,
     else => false,
@@ -53,10 +54,10 @@ pub const Protocol = enum(u32) {
     ICMP = if (is_posix) sys.PROTO_icmp else sys.IPPROTO_ICMP,
 };
 
-pub const Shutdown = enum {
-    Read,
-    Write,
-    Both,
+pub const Shutdown = enum(u32) {
+    Read = if (is_posix) sys.SHUT_RD else sys.SD_RECEIVE,
+    Write = if (is_posix) sys.SHUT_WR else sys.SD_SEND,
+    Both = if (is_posix) sys.SHUT_RDWR else sys.SD_BOTH,
 };
 
 pub const SocketError = error {
@@ -97,7 +98,7 @@ pub const BindError = error {
     /// The  port number was specified as zero in the socket
     /// address structure, but, upon attempting to bind to  an  ephemeral  port,  it  was
     /// determined  that  all  port  numbers in the ephemeral port range are currently in
-    /// use.  See the discussion of /proc/sys/net/ipv4/ip_local_port_range ip(7).
+    /// use.
     AddressInUse,
 
     /// A nonexistent interface was requested or the requested address was not local.
@@ -130,7 +131,7 @@ pub const ListenError = error {
     /// For Internet domain sockets, the  socket referred to by socket had not previously
     /// been bound to an address and, upon attempting to bind it to an ephemeral port, it
     /// was determined that all port numbers in the ephemeral port range are currently in
-    /// use.  See the discussion of /proc/sys/net/ipv4/ip_local_port_range in ip(7).
+    /// use.
     AddressInUse,
 
     /// The file descriptor socket does not refer to a socket.
@@ -174,19 +175,11 @@ pub const AcceptError = error {
     Unexpected,
 };
 
-pub const GetSockNameError = error {
-    /// Insufficient resources were available in the system to perform the operation.
-    SystemResources,
-
-    /// See https://github.com/ziglang/zig/issues/1396
-    Unexpected,
-};
-
 pub const ConnectError = error {
-    /// For UNIX domain sockets, which are identified by pathname: Write permission is denied on  the  socket
-    /// file,  or  search  permission  is  denied  for  one of the directories in the path prefix.
+    /// For UNIX domain sockets, which are identified by pathname: Write permission is denied on the socket
+    /// file, or search permission is denied for one of the directories in the path prefix.
     /// or
-    /// The user tried to connect to a broadcast address without having the socket broadcast flag enabled  or
+    /// The user tried to connect to a broadcast address without having the socket broadcast flag enabled or
     /// the connection request failed because of a local firewall rule.
     PermissionDenied,
 
@@ -195,8 +188,7 @@ pub const ConnectError = error {
 
     /// (Internet  domain  sockets)  The  socket  referred  to  by socket had not previously been bound to an
     /// address and, upon attempting to bind it to an ephemeral port, it was determined that all port numbers
-    /// in    the    ephemeral    port    range    are   currently   in   use.    See   the   discussion   of
-    /// /proc/sys/net/ipv4/ip_local_port_range in ip(7).
+    /// in the ephemeral port range are currently in use.
     AddressNotAvailable,
 
     /// The passed address didn't have the correct address family in its sa_family field.
@@ -211,7 +203,7 @@ pub const ConnectError = error {
     /// Network is unreachable.
     NetworkUnreachable,
 
-    /// Timeout  while  attempting  connection.   The server may be too busy to accept new connections.  Note
+    /// Timeout while attempting connection. The server may be too busy to accept new connections. Note
     /// that for IP sockets the timeout may be very long when syncookies are enabled on the server.
     ConnectionTimedOut,
 
@@ -219,8 +211,41 @@ pub const ConnectError = error {
     Unexpected,
 };
 
-// pub const ShutdownError = error {
-// };
+pub const GetSockNameError = error {
+    /// Insufficient resources were available in the system to perform the operation.
+    SystemResources,
+
+    /// The file descriptor socket does not refer to a socket.
+    FileDescriptorNotASocket,
+
+    /// See https://github.com/ziglang/zig/issues/1396
+    Unexpected,
+};
+
+pub const GetPeerNameError = error {
+    /// Insufficient resources were available in the system to perform the operation.
+    SystemResources,
+
+    /// The file descriptor socket does not refer to a socket.
+    FileDescriptorNotASocket,
+
+    /// The socket is not connected.
+    NotConnected,
+
+    /// See https://github.com/ziglang/zig/issues/1396
+    Unexpected,
+};
+
+pub const ShutdownError = error {
+    /// The file descriptor socket does not refer to a socket.
+    FileDescriptorNotASocket,
+
+    /// The socket is not connected.
+    NotConnected,
+
+    /// See https://github.com/ziglang/zig/issues/1396
+    Unexpected,
+};
 
 fn accept4Windows(fd: SocketFd, addr: ?*net.OsAddress, addrlen: ?*sys.socklen_t, flags: u32) SocketFd {
     const result = sys.accept(fd, addr, @ptrCast(*c_int, addrlen));
@@ -241,15 +266,29 @@ fn accept4Windows(fd: SocketFd, addr: ?*net.OsAddress, addrlen: ?*sys.socklen_t,
     return result;
 }
 
+// add timeouts
+
 pub const Socket = struct {
     fd: SocketFd,
+    domain: Domain,
+    socket_type: SocketType,
+    protocol: Protocol,
+
+    fn initSocket(fd: SocketFd, domain: Domain, socket_type: SocketType, protocol: Protocol) Socket {
+        return Socket {
+            .fd = @intCast(SocketFd, rc),
+            .domain = domain,
+            .socket_type = socket_type,
+            .protocol = protocol,
+        };
+    }
 
     pub fn new(domain: Domain, socket_type: SocketType, protocol: Protocol) SocketError!Socket {
         if (is_posix) {
             const rc = sys.socket(domain, socket_type, protocol);
             const err = sys.getErrno(rc);
             switch (err) {
-                0 => return Socket { .fd = @intCast(SocketFd, rc) },
+                0 => return initSocket(@intCast(SocketFd, rc), domain, socket_type, protocol),
                 sys.EACCES => return SocketError.PermissionDenied,
                 sys.EAFNOSUPPORT => return SocketError.AddressFamilyNotSupported,
                 sys.EINVAL => return SocketError.ProtocolFamilyNotAvailable,
@@ -269,13 +308,13 @@ pub const Socket = struct {
             const err = sys.WSAGetLastError();
             // TODO check for TOO_MANY_OPEN_FILES?
             switch (err) {
-                0 => return  Socket { .fd = rc },
+                0 => return initSocket(rc, domain, socket_type, protocol),
                 sys.ERROR.WSAEACCES => return SocketError.PermissionDenied,
                 sys.ERROR.WSAEAFNOSUPPORT => return SocketError.AddressFamilyNotSupported,
                 sys.ERROR.WSAEINVAL => return SocketError.ProtocolFamilyNotAvailable,
                 sys.ERROR.WSAEMFILE => return SocketError.ProcessFdQuotaExceeded,
-                sys.ERROR.WSAENOBUFS, sys.ERROR.WSA_NOT_ENOUGH_MEMORY => return SocketError.SystemResources,
-                sys.ERROR.WSAEPROTONOSUPPORT => return SocketError.ProtocolNotSupported,
+                sys.ERROR.WSAENOBUFS => return SocketError.SystemResources,
+                sys.ERROR.WSAEPROTONOSUPPORT, sys.ERROR.WSAEPROTOTYPE, sys.ERROR.WSAESOCKTNOSUPPORT => return SocketError.ProtocolNotSupported,
                 else => return unexpectedError(@intCast(u32, err)),
             }
         }
@@ -322,14 +361,10 @@ pub const Socket = struct {
                 0 => return,
                 sys.ERROR.WSAEACCES => return BindError.AccessDenied,
                 sys.ERROR.WSAEADDRINUSE => return BindError.AddressInUse,
-                sys.ERROR.WSAEBADF => unreachable, // always a race condition if this error is returned
                 sys.ERROR.WSAEINVAL => unreachable,
                 sys.ERROR.WSAENOTSOCK => unreachable,
                 sys.ERROR.WSAEADDRNOTAVAIL => return BindError.AddressNotAvailable,
                 sys.ERROR.WSAEFAULT => unreachable,
-                sys.ERROR.WSAELOOP => return BindError.SymLinkLoop,
-                sys.ERROR.WSAENAMETOOLONG => return BindError.NameTooLong,
-                sys.ERROR.WSA_NOT_ENOUGH_MEMORY => return BindError.SystemResources,
                 else => return unexpectedError(@intCast(u32, err)),
             }
         }
@@ -353,13 +388,15 @@ pub const Socket = struct {
             switch (err) {
                 0 => return,
                 sys.ERROR.WSAEADDRINUSE => return ListenError.AddressInUse,
-                sys.ERROR.WSAEBADF => unreachable,
                 sys.ERROR.WSAENOTSOCK => return ListenError.FileDescriptorNotASocket,
-                sys.ERROR.WSAEOPNOTSUPP => return ListenError.OperationNotSupported,
+                // these are technically protocol/domain errors
+                sys.ERROR.WSAEPROTOTYPE, sys.ERROR.WSAEPROTONOSUPPORT, sys.ERROR.WSAESOCKTNOSUPPORT => return ListenError.OperationNotSupported,
+                sys.ERROR.WSAENOBUFS, sys.ERROR.WSAEMFILE => unreachable, // return error for this? (system resources)
+                sys.ERROR.WSAEISCONN => unreachable, // return error for this? (already connected)
+                sys.ERROR.WSAEINVAL => unreachable, // return error for this? (not bound)
                 else => return unexpectedError(@intCast(u32, err)),
             }
         }
-        
     }
 
     pub fn accept(self: Socket, addr: *net.Address, flags: u32) AcceptError!Socket {
@@ -369,7 +406,7 @@ pub const Socket = struct {
                 const rc = sys.accept4(self.fd, &addr.os_addr, &sockaddr_size, flags);
                 const err = sys.getErrno(rc);
                 switch (err) {
-                    0 => return Socket { .fd = @intCast(SocketFd, rc) },
+                    0 => return initSocket(@intCast(SocketFd, rc), self.domain, self.socket_type, self.protocol),
                     sys.EINTR => continue,
                     else => return unexpectedError(err),
                     sys.EAGAIN => unreachable, // use asyncAccept for non-blocking
@@ -398,37 +435,34 @@ pub const Socket = struct {
                         if (rc == InvalidSocketFd) {
                             return unexpectedError(@intCast(u32, sys.GetLastError()));
                         } else {
-                            return Socket { .fd = rc };
+                            return initSocket(rc, self.domain, self.socket_type, self.protocol);
                         }
                     },
                     sys.ERROR.WSAEINTR => continue,
                     else => return unexpectedError(@intCast(u32, err)),
                     // TODO check for TOO_MANY_OPEN_FILES?
                     sys.ERROR.WSAEWOULDBLOCK => unreachable, // use asyncAccept for non-blocking
-                    sys.ERROR.WSAEBADF => unreachable, // always a race condition
-                    sys.ERROR.WSAECONNABORTED => return AcceptError.ConnectionAborted,
+                    sys.ERROR.WSAECONNRESET => return AcceptError.ConnectionAborted,
                     sys.ERROR.WSAEFAULT => unreachable,
                     sys.ERROR.WSAEINVAL => unreachable,
                     sys.ERROR.WSAEMFILE => return AcceptError.ProcessFdQuotaExceeded,
                     sys.ERROR.WSAENOBUFS => return AcceptError.SystemResources,
-                    sys.ERROR.WSA_NOT_ENOUGH_MEMORY => return AcceptError.SystemResources,
                     sys.ERROR.WSAENOTSOCK => return AcceptError.FileDescriptorNotASocket,
                     sys.ERROR.WSAEOPNOTSUPP => return AcceptError.OperationNotSupported,
-                    sys.ERROR.WSAEACCES => return AcceptError.BlockedByFirewall,
                 }
             }
         }
     }
 
     /// Returns InvalidSocketFd if would block.
-    pub fn asyncAccept(self: Socket, addr: *net.OsAddress, flags: u32) AcceptError!Socket {
+    pub fn asyncAccept(self: Socket, addr: *net.Address, flags: u32) AcceptError!Socket {
         if (is_posix) {
             while (true) {
                 var sockaddr_size = sys.socklen_t(@sizeOf(net.OsAddress));
                 const rc = sys.accept4(self.fd, &addr.os_addr, &sockaddr_size, flags);
                 const err = sys.getErrno(rc);
                 switch (err) {
-                    0 => return Socket { .fd = @intCast(SocketFd, rc) },
+                    0 => return initSocket(@intCast(SocketFd, rc), self.domain, self.socket_type, self.protocol),
                     sys.EINTR => continue,
                     else => return unexpectedError(err),
                     sys.EAGAIN  => return InvalidSocketFd,
@@ -453,17 +487,15 @@ pub const Socket = struct {
                 const err = sys.WSAGetLastError();
                 // TODO check for TOO_MANY_OPEN_FILES?
                 switch (err) {
-                    0 => return Socket { .fd = rc },
+                    0 => return initSocket(rc, self.domain, self.socket_type, self.protocol),
                     sys.ERROR.WSAEINTR => continue,
                     else => return unexpectedError(@intCast(u32, err)),
                     sys.ERROR.WSAEWOULDBLOCK  => return InvalidSocketFd,
-                    sys.ERROR.WSAEBADF => unreachable, // always a race condition
-                    sys.ERROR.WSAECONNABORTED => return AcceptError.ConnectionAborted,
+                    sys.ERROR.WSAECONNRESET => return AcceptError.ConnectionAborted,
                     sys.ERROR.WSAEFAULT => unreachable,
                     sys.ERROR.WSAEINVAL => unreachable,
                     sys.ERROR.WSAEMFILE => return AcceptError.ProcessFdQuotaExceeded,
                     sys.ERROR.WSAENOBUFS => return AcceptError.SystemResources,
-                    sys.ERROR.WSA_NOT_ENOUGH_MEMORY => return AcceptError.SystemResources,
                     sys.ERROR.WSAENOTSOCK => return AcceptError.FileDescriptorNotASocket,
                     sys.ERROR.WSAEOPNOTSUPP => return AcceptError.OperationNotSupported,
                     sys.ERROR.WSAEACCES => return AcceptError.BlockedByFirewall,
@@ -472,37 +504,7 @@ pub const Socket = struct {
         }
     }
 
-    pub fn getSockName(self: Socket) GetSockNameError!net.OsAddress {
-        var addr: net.OsAddress = undefined;
-        var addrlen: sys.socklen_t = @sizeOf(net.OsAddress);
-        const rc = sys.getsockname(self.fd, &addr, &addrlen);
-
-        if (is_posix) {
-            const err = sys.getErrno(rc);
-            switch (err) {
-                0 => return net.OsAddress.init(addr),
-                else => return unexpectedError(err),
-                sys.EBADF => unreachable,
-                sys.EFAULT => unreachable,
-                sys.EINVAL => unreachable,
-                sys.ENOTSOCK => unreachable,
-                sys.ENOBUFS => return GetSockNameError.SystemResources,
-            }
-        } else {
-            const err = sys.WSAGetLastError();
-            switch (err) {
-                0 => return net.OsAddress.init(addr),
-                else => return unexpectedError(@intCast(u32, err)),
-                sys.ERROR.WSAEBADF => unreachable,
-                sys.ERROR.WSAEFAULT => unreachable,
-                sys.ERROR.WSAEINVAL => unreachable,
-                sys.ERROR.WSAENOTSOCK => unreachable,
-                sys.ERROR.WSAENOBUFS => return GetSockNameError.SystemResources,
-            }
-        }
-    }
-
-    pub fn connect(self: Socket, addr: *const net.OsAddress) ConnectError!void {
+    pub fn connect(self: Socket, addr: *const net.Address) ConnectError!void {
         if (is_posix) {
             while (true) {
                 const rc = sys.connect(self.fd, &addr.os_addr, @sizeOf(net.OsAddress));
@@ -541,16 +543,16 @@ pub const Socket = struct {
                     sys.ERROR.WSAEAFNOSUPPORT => return ConnectError.AddressFamilyNotSupported,
                     sys.ERROR.WSAEWOULDBLOCK => return ConnectError.SystemResources,
                     sys.ERROR.WSAEALREADY => unreachable, // The socket is nonblocking and a previous connection attempt has not yet been completed.
-                    sys.ERROR.WSAEBADF => unreachable, // socket is not a valid open file descriptor.
                     sys.ERROR.WSAECONNREFUSED => return ConnectError.ConnectionRefused,
                     sys.ERROR.WSAEFAULT => unreachable, // The socket structure address is outside the user's address space.
                     sys.ERROR.WSAEINPROGRESS => unreachable, // The socket is nonblocking and the connection cannot be completed immediately.
                     sys.ERROR.WSAEINTR => continue,
                     sys.ERROR.WSAEISCONN => unreachable, // The socket is already connected.
                     sys.ERROR.WSAENETUNREACH => return ConnectError.NetworkUnreachable,
+                    sys.ERROR.WSAEHOSTUNREACH => unreachable, // return error for this? (unreachable host)
                     sys.ERROR.WSAENOTSOCK => unreachable, // The file descriptor socket does not refer to a socket.
-                    sys.ERROR.WSAEPROTOTYPE => unreachable, // The socket type does not support the requested communications protocol.
                     sys.ERROR.WSAETIMEDOUT => return ConnectError.ConnectionTimedOut,
+                    sys.ERROR.WSAENOBUFS => ConnectError.SystemResources,
                     else => return unexpectedError(@intCast(u32, err)),
                 }
             }
@@ -559,7 +561,7 @@ pub const Socket = struct {
 
     /// Same as connect except it is for blocking socket file descriptors.
     /// It expects to receive EINPROGRESS.
-    pub fn connectAsync(self: Sokcet, addr: *const net.OsAddress) ConnectError!void {
+    pub fn connectAsync(self: Sokcet, addr: *const net.Address) ConnectError!void {
         if (is_posix) {
             while (true) {
                 const rc = sys.connect(self.fd, &addr.os_addr, @sizeOf(net.OsAddress));
@@ -597,15 +599,15 @@ pub const Socket = struct {
                     sys.ERROR.WSAEAFNOSUPPORT => return ConnectError.AddressFamilyNotSupported,
                     sys.ERROR.WSAEWOULDBLOCK => return ConnectError.SystemResources,
                     sys.ERROR.WSAEALREADY => unreachable, // The socket is nonblocking and a previous connection attempt has not yet been completed.
-                    sys.ERROR.WSAEBADF => unreachable, // socket is not a valid open file descriptor.
                     sys.ERROR.WSAECONNREFUSED => return ConnectError.ConnectionRefused,
                     sys.ERROR.WSAEFAULT => unreachable, // The socket structure address is outside the user's address space.
                     sys.ERROR.WSAEINTR => continue,
                     sys.ERROR.WSAEISCONN => unreachable, // The socket is already connected.
                     sys.ERROR.WSAENETUNREACH => return ConnectError.NetworkUnreachable,
+                    sys.ERROR.WSAEHOSTUNREACH => unreachable, // return error for this? (unreachable host)
                     sys.ERROR.WSAENOTSOCK => unreachable, // The file descriptor socket does not refer to a socket.
-                    sys.ERROR.WSAEPROTOTYPE => unreachable, // The socket type does not support the requested communications protocol.
                     sys.ERROR.WSAETIMEDOUT => return ConnectError.ConnectionTimedOut,
+                    sys.ERROR.WSAENOBUFS => ConnectError.SystemResources,
                     else => return unexpectedError(@intCast(u32, err)),
                 }
             }
@@ -677,8 +679,100 @@ pub const Socket = struct {
         }
     }
 
-    // pub fn shutdown(self: Socket) !void {
-    // }
+    pub fn getSockName(self: Socket) GetSockNameError!net.Address {
+        var addr: net.OsAddress = undefined;
+        var addrlen: sys.socklen_t = @sizeOf(net.OsAddress);
+        const rc = sys.getsockname(self.fd, &addr, &addrlen);
+
+        if (is_posix) {
+            const err = sys.getErrno(rc);
+            switch (err) {
+                0 => return net.Address.init(addr),
+                else => return unexpectedError(err),
+                sys.EBADF => unreachable,
+                sys.EFAULT => unreachable,
+                sys.EINVAL => unreachable,
+                sys.ENOTSOCK => return GetSockNameError.FileDescriptorNotASocket,
+                sys.ENOBUFS => return GetSockNameError.SystemResources,
+            }
+        } else {
+            const err = sys.WSAGetLastError();
+            switch (err) {
+                0 => return net.Address.init(addr),
+                else => return unexpectedError(@intCast(u32, err)),
+                sys.ERROR.WSAEFAULT => unreachable,
+                sys.ERROR.WSAEINVAL => unreachable,
+                sys.ERROR.WSAENOTSOCK => return GetSockNameError.FileDescriptorNotASocket,
+            }
+        }
+    }
+
+    pub fn getPeerName(self: Socket) GetPeerNameError!net.Address {
+        var addr: net.OsAddress = undefined;
+        var addrlen: sys.socklen_t = @sizeOf(net.OsAddress);
+        const rc = sys.getpeername(self.fd, &addr, &addrlen);
+
+        if (is_posix) {
+            const err = sys.getErrno(rc);
+            switch (err) {
+                0 => return net.Address.init(addr),
+                else => return unexpectedError(err),
+                sys.EBADF => unreachable,
+                sys.EFAULT => unreachable,
+                sys.EINVAL => unreachable,
+                sys.ENOTSOCK => return GetPeerNameError.FileDescriptorNotASocket,
+                sys.ENOTCONN => return GetPeerNameError.NotConnected,
+                sys.ENOBUFS => return GetPeerNameError.SystemResources,
+            }
+        } else {
+            const err = sys.WSAGetLastError();
+            switch (err) {
+                0 => return net.Address.init(addr),
+                else => return unexpectedError(@intCast(u32, err)),
+                sys.ERROR.WSAEFAULT => unreachable,
+                sys.ERROR.WSAEINVAL => unreachable,
+                sys.ERROR.WSAENOTSOCK => return GetPeerNameError.FileDescriptorNotASocket,
+                sys.ERROR.WSAENOTCONN => return GetPeerNameError.NotConnected,
+                sys.ERROR.WSAENOBUFS => return GetPeerNameError.SystemResources,
+            }
+        }
+    }
+    
+    pub fn shutdown(self: Socket, how: Shutdown) ShutdownError!void {
+        if (is_posix) {
+            const rc = sys.shutdown(self.fd, @enumToInt(how));
+            const err = sys.getErrno(rc);
+            switch (err) {
+                0 => {},
+                else => return unexpectedError(err),
+                sys.EBADF => unreachable,
+                sys.EINVAL => unreachable,
+                sys.ENOTCONN => return ShutdownError.NotConnected,
+                sys.ENOTSOCK => return ShutdownError.FileDescriptorNotASocket,
+            }
+        } else {
+            const rc = blk: {
+                const _how = @intCast(c_int, @enumToInt(how));
+                break :blk sys.socket(self.fd, _sock_type);
+            };
+            const err = sys.WSAGetLastError();
+            switch (err) {
+                0 => {},
+                sys.ERROR.WSAEINVAL => unreachable,
+                sys.ERROR.WSAEINPROGRESS => unreachable,
+                sys.ERROR.WSAENOTCONN => return ShutdownError.NotConnected,
+                sys.ERROR.WSAENOTSOCK => return ShutdownError.FileDescriptorNotASocket,
+            }
+        }
+    }
+
+    pub fn close(self: Socket) void {
+        if (is_posix) {
+            os.close(self.fd);
+        } else {
+            _ = sys.closesocket(self.fd);
+        }
+    }
 
     // pub fn getSockOpt() {
     // }
@@ -692,11 +786,9 @@ pub const Socket = struct {
     // pub fn recv(self: Socket, buf: []u8) {
     // }
 
-    pub fn close(self: Socket) void {
-        if (is_posix) {
-            os.close(self.fd);
-        } else {
-            _ = sys.closesocket(self.fd);
-        }
-    }
+    // pub fn sendTo() {
+    // }
+
+    // pub fn recvFrom() {
+    // }
 };
