@@ -1529,6 +1529,55 @@ pub const dirent64 = extern struct {
     d_name: u8, // field address is the address of first byte of name https://github.com/ziglang/zig/issues/173
 };
 
+pub const f_owner_ex = extern struct{
+	@"type": i32,
+	pid: i32
+};
+
+pub fn fcntl(fd: i32, cmd: u32, arg: u32) usize {
+    var args = 0;
+
+    if (cmd == F_SETFL) {
+        args |= O_LARGEFILE;
+    }
+
+	if (cmd == F_SETLKW) {
+        return syscall4(SYS_fcntl, @bitCast(usize, isize(fd)), cmd, args);
+    }
+	
+    if (cmd == F_GETOWN) {
+		var ex: f_owner_ex = undefined;
+		var ret = syscall4(SYS_fcntl, @bitCast(usize, isize(fd)), F_GETOWN_EX, &ex);
+		if (ret == -EINVAL) return syscall4(SYS_fcntl, @bitCast(usize, isize(fd)), cmd, args);
+		if (ret != 0) return ret;
+		return if (ex.@"type" == F_OWNER_PGRP) -ex.pid else ex.pid;
+	}
+
+	if (cmd == F_DUPFD_CLOEXEC) {
+		var ret = syscall4(SYS_fcntl, @bitCast(usize, isize(fd)), F_DUPFD_CLOEXEC, args);
+		if (ret != -EINVAL) {
+			if (ret >= 0) {
+				_ = syscall4(SYS_fcntl, ret, F_SETFD, FD_CLOEXEC);
+            }
+			return ret;
+		}
+		ret = syscall4(SYS_fcntl, @bitCast(usize, isize(fd)), F_DUPFD_CLOEXEC, 0);
+		if (ret != -EINVAL) {
+			if (ret >= 0) {
+                _ = syscall2(SYS_close, ret);
+            }
+			return -EINVAL;
+		}
+		ret = syscall4(SYS_fcntl, @bitCast(usize, isize(fd)), F_DUPFD, arg);
+		if (ret >= 0) {
+            _ = syscall4(SYS_fcntl, ret, F_SETFD, FD_CLOEXEC);
+        }
+		return ret;
+	}
+	
+    return syscall4(SYS_fcntl, @bitCast(usize, isize(fd)), cmd, arg);
+}
+
 test "import" {
     if (builtin.os == builtin.Os.linux) {
         _ = @import("test.zig");

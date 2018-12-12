@@ -17,7 +17,7 @@ test "std.os" {
     _ = @import("path.zig");
     _ = @import("test.zig");
     _ = @import("time.zig");
-    _ = @import("socket.zig");
+    _ = @import("socket/index.zig");
     _ = @import("windows/index.zig");
     _ = @import("get_app_data_dir.zig");
 }
@@ -35,7 +35,7 @@ pub const posix = switch (builtin.os) {
     else => @compileError("Unsupported OS"),
 };
 pub const net = @import("net.zig");
-pub const socket = @import("socket.zig");
+pub const socket = @import("socket/index.zig");
 
 pub const ChildProcess = @import("child_process.zig").ChildProcess;
 pub const path = @import("path.zig");

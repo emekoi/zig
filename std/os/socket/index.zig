@@ -1,7 +1,10 @@
+pub use @import("errors.zig");
+use @import("errors.zig");
+
 const std = @import("../index.zig");
 const builtin = @import("builtin");
-const os = std.os;
 const net = std.net;
+const os = std.os;
 
 const sys = switch (builtin.os) {
     builtin.Os.windows => std.os.windows,
@@ -30,222 +33,86 @@ pub const InvalidSocketFd: SocketFd = switch (builtin.os) {
     else => -1,
 };
 
-pub const Domain = enum(u32) {
-    Unspecified = sys.AF_UNSPEC,
-    Unix = sys.AF_UNIX,
-    Inet = sys.AF_INET,
-    Inet6 = sys.AF_INET6,
-};
-
-pub const SocketType = enum(u32) {
-    Stream = sys.SOCK_STREAM,
-    DataGram = sys.SOCK_DGRAM,
-    Raw = sys.SOCK_RAW,
-    SeqPacket = sys.SOCK_SEQPACKET,
-};
-
-pub const Protocol = enum(u32) {
+pub const Domain = enum {
+    Unspecified,
     Unix,
-    TCP = if (is_posix) sys.PROTO_tcp else sys.IPPROTO_TCP,
-    UDP = if (is_posix) sys.PROTO_udp else sys.IPPROTO_UDP,
-    IP = if (is_posix) sys.PROTO_ip else sys.IPPROTO_IP,
-    IPV6 = if (is_posix) sys.PROTO_ipv6 else sys.IPPROTO_IPV6,
-    RAW = if (is_posix) sys.PROTO_raw else sys.IPPROTO_RAW,
-    ICMP = if (is_posix) sys.PROTO_icmp else sys.IPPROTO_ICMP,
+    Inet,
+    Inet6,
+
+    fn toInt(self: Domain, comptime T: type) T {
+        return @intCast(T, switch (self) {
+            Domain.Unspecified => sys.AF_UNSPEC,
+            Domain.Unix => sys.AF_UNIX,
+            Domain.Inet => sys.AF_INET,
+            Domain.Inet6 => sys.AF_INET6,
+        });
+    }
 };
 
-pub const Shutdown = enum(u32) {
+pub const SocketType = enum {
+    Stream,
+    DataGram,
+    Raw,
+    SeqPacket,
+
+    fn toInt(self: SocketType, comptime T: type) T {
+        return @intCast(T, switch (self) {
+            SocketType.Stream => sys.SOCK_STREAM,
+            SocketType.DataGram => sys.SOCK_DGRAM,
+            SocketType.Raw => sys.SOCK_RAW,
+            SocketType.SeqPacket => sys.SOCK_SEQPACKET,
+        });
+    }
+};
+
+pub const Protocol = enum {
+    Unix,
+    TCP,
+    UDP,
+    IP,
+    IPV6,
+    RAW,
+    ICMP,
+
+    fn toInt(self: Protocol, comptime T: type) !T {
+        return @intCast(T, switch (self) {
+            Protocol.Unix => if (is_posix) 0 else return SocketError.ProtocolNotSupported,
+            Protocol.TCP => if (is_posix) sys.PROTO_tcp else sys.IPPROTO_TCP,
+            Protocol.UDP => if (is_posix) sys.PROTO_udp else sys.IPPROTO_UDP,
+            Protocol.IP => if (is_posix) sys.PROTO_ip else sys.IPPROTO_IP,
+            Protocol.IPV6 => if (is_posix) sys.PROTO_ipv6 else sys.IPPROTO_IPV6,
+            Protocol.RAW => if (is_posix) sys.PROTO_raw else sys.IPPROTO_RAW,
+            Protocol.ICMP => if (is_posix) sys.PROTO_icmp else sys.IPPROTO_ICMP,
+
+        });
+    }
+};
+
+pub const Shutdown = enum {
     Read = if (is_posix) sys.SHUT_RD else sys.SD_RECEIVE,
     Write = if (is_posix) sys.SHUT_WR else sys.SD_SEND,
     Both = if (is_posix) sys.SHUT_RDWR else sys.SD_BOTH,
+
+    fn toInt(self: Shutdown, comptime T: type) T {
+        return @intCast(T, switch (self) {
+            Shutdown.Read => if (is_posix) sys.SHUT_RD else sys.SD_RECEIVE,
+            Shutdown.Write => if (is_posix) sys.SHUT_WR else sys.SD_SEND,
+            Shutdown.Both => if (is_posix) sys.SHUT_RDWR else sys.SD_BOTH,
+        });
+    }
 };
 
-pub const SocketError = error {
-    /// Permission to create a socket of the specified type and/or
-    /// protocol is denied.
-    PermissionDenied,
-
-    /// The implementation does not support the specified address family.
-    AddressFamilyNotSupported,
-
-    /// Unknown protocol, or protocol family not available.
-    ProtocolFamilyNotAvailable,
-
-    /// The per-process limit on the number of open file descriptors has been reached.
-    ProcessFdQuotaExceeded,
-
-    /// The system-wide limit on the total number of open files has been reached.
-    SystemFdQuotaExceeded,
-
-    /// Insufficient memory is available. The socket cannot be created until sufficient
-    /// resources are freed.
-    SystemResources,
-
-    /// The protocol type or the specified protocol is not supported within this domain.
-    ProtocolNotSupported,
-
-    /// See https://github.com/ziglang/zig/issues/1396
-    Unexpected,
-};
-
-pub const BindError = error {
-    /// The address is protected, and the user is not the superuser.
-    /// For UNIX domain sockets: Search permission is denied on  a  component
-    /// of  the  path  prefix.
-    AccessDenied,
-
-    /// The given address is already in use, or in the case of Internet domain sockets,
-    /// The  port number was specified as zero in the socket
-    /// address structure, but, upon attempting to bind to  an  ephemeral  port,  it  was
-    /// determined  that  all  port  numbers in the ephemeral port range are currently in
-    /// use.
-    AddressInUse,
-
-    /// A nonexistent interface was requested or the requested address was not local.
-    AddressNotAvailable,
-
-    /// Too many symbolic links were encountered in resolving addr.
-    SymLinkLoop,
-
-    /// addr is too long.
-    NameTooLong,
-
-    /// A component in the directory prefix of the socket pathname does not exist.
-    FileNotFound,
-
-    /// Insufficient kernel memory was available.
-    SystemResources,
-
-    /// A component of the path prefix is not a directory.
-    NotDir,
-
-    /// The socket inode would reside on a read-only filesystem.
-    ReadOnlyFileSystem,
-
-    /// See https://github.com/ziglang/zig/issues/1396
-    Unexpected,
-};
-
-pub const ListenError = error {
-    /// Another socket is already listening on the same port.
-    /// For Internet domain sockets, the  socket referred to by socket had not previously
-    /// been bound to an address and, upon attempting to bind it to an ephemeral port, it
-    /// was determined that all port numbers in the ephemeral port range are currently in
-    /// use.
-    AddressInUse,
-
-    /// The file descriptor socket does not refer to a socket.
-    FileDescriptorNotASocket,
-
-    /// The socket is not of a type that supports the listen() operation.
-    OperationNotSupported,
-
-    /// See https://github.com/ziglang/zig/issues/1396
-    Unexpected,
-};
-
-pub const AcceptError = error {
-    ConnectionAborted,
-
-    /// The per-process limit on the number of open file descriptors has been reached.
-    ProcessFdQuotaExceeded,
-
-    /// The system-wide limit on the total number of open files has been reached.
-    SystemFdQuotaExceeded,
-
-    /// Not enough free memory.  This often means that the memory allocation  is  limited
-    /// by the socket buffer limits, not by the system memory.
-    SystemResources,
-
-    /// The file descriptor socket does not refer to a socket.
-    FileDescriptorNotASocket,
-
-    /// The referenced socket is not of type SOCK_STREAM.
-    OperationNotSupported,
-
-    ProtocolFailure,
-
-    /// Firewall rules forbid connection.
-    BlockedByFirewall,
-
-    /// Accepting would block.
-    WouldBlock,
-
-    /// See https://github.com/ziglang/zig/issues/1396
-    Unexpected,
-};
-
-pub const ConnectError = error {
-    /// For UNIX domain sockets, which are identified by pathname: Write permission is denied on the socket
-    /// file, or search permission is denied for one of the directories in the path prefix.
-    /// or
-    /// The user tried to connect to a broadcast address without having the socket broadcast flag enabled or
-    /// the connection request failed because of a local firewall rule.
-    PermissionDenied,
-
-    /// Local address is already in use.
-    AddressInUse,
-
-    /// (Internet  domain  sockets)  The  socket  referred  to  by socket had not previously been bound to an
-    /// address and, upon attempting to bind it to an ephemeral port, it was determined that all port numbers
-    /// in the ephemeral port range are currently in use.
-    AddressNotAvailable,
-
-    /// The passed address didn't have the correct address family in its sa_family field.
-    AddressFamilyNotSupported,
-
-    /// Insufficient entries in the routing cache.
-    SystemResources,
-
-    /// A connect() on a stream socket found no one listening on the remote address.
-    ConnectionRefused,
-
-    /// Network is unreachable.
-    NetworkUnreachable,
-
-    /// Timeout while attempting connection. The server may be too busy to accept new connections. Note
-    /// that for IP sockets the timeout may be very long when syncookies are enabled on the server.
-    ConnectionTimedOut,
-
-    /// See https://github.com/ziglang/zig/issues/1396
-    Unexpected,
-};
-
-pub const GetSockNameError = error {
-    /// Insufficient resources were available in the system to perform the operation.
-    SystemResources,
-
-    /// The file descriptor socket does not refer to a socket.
-    FileDescriptorNotASocket,
-
-    /// See https://github.com/ziglang/zig/issues/1396
-    Unexpected,
-};
-
-pub const GetPeerNameError = error {
-    /// Insufficient resources were available in the system to perform the operation.
-    SystemResources,
-
-    /// The file descriptor socket does not refer to a socket.
-    FileDescriptorNotASocket,
-
-    /// The socket is not connected.
-    NotConnected,
-
-    /// See https://github.com/ziglang/zig/issues/1396
-    Unexpected,
-};
-
-pub const ShutdownError = error {
-    /// The file descriptor socket does not refer to a socket.
-    FileDescriptorNotASocket,
-
-    /// The socket is not connected.
-    NotConnected,
-
-    /// See https://github.com/ziglang/zig/issues/1396
-    Unexpected,
-};
+// pub const Level = enum(u32) {
+//     IP = if (is_posix) sys.SOL_IP ,
+//     IPV6 = if (is_posix) sys.SOL_IPV6 ,
+//     RM = if (is_posix) sys. ,
+//     TCP = if (is_posix) sys. ,
+//     UDP = if (is_posix) sys. ,
+//     IPX = if (is_posix) sys. ,
+//     AppleTalk = if (is_posix) sys. ,
+//     IRLMP = if (is_posix) sys. ,
+//     Socket = if (is_posix) sys. ,
+// };
 
 fn accept4Windows(fd: SocketFd, addr: ?*net.OsAddress, addrlen: ?*sys.socklen_t, flags: u32) SocketFd {
     const result = sys.accept(fd, addr, @ptrCast(*c_int, addrlen));
@@ -285,7 +152,7 @@ pub const Socket = struct {
 
     pub fn new(domain: Domain, socket_type: SocketType, protocol: Protocol) SocketError!Socket {
         if (is_posix) {
-            const rc = sys.socket(domain, socket_type, protocol);
+            const rc = sys.socket(domain.toInt(u32), socket_type.toInt(u32), try protocol.toInt(u32));
             const err = sys.getErrno(rc);
             switch (err) {
                 0 => return initSocket(@intCast(SocketFd, rc), domain, socket_type, protocol),
@@ -299,12 +166,7 @@ pub const Socket = struct {
                 else => return unexpectedError(err),
             }
         } else {
-            const rc = blk: {
-                const _domain = @intCast(c_int, @enumToInt(domain));
-                const _sock_type = @intCast(c_int, @enumToInt(socket_type));
-                const _protocol = @intCast(c_int, @enumToInt(protocol));
-                break :blk sys.socket(_domain, _sock_type, _protocol);
-            };
+            const rc = sys.socket(domain.toInt(c_int), sock_type.toInt(c_int), try protocol.toInt(c_int));
             const err = sys.WSAGetLastError();
             // TODO check for TOO_MANY_OPEN_FILES?
             switch (err) {
@@ -740,7 +602,7 @@ pub const Socket = struct {
     
     pub fn shutdown(self: Socket, how: Shutdown) ShutdownError!void {
         if (is_posix) {
-            const rc = sys.shutdown(self.fd, @enumToInt(how));
+            const rc = sys.shutdown(self.fd, how.toInt(u32));
             const err = sys.getErrno(rc);
             switch (err) {
                 0 => {},
@@ -751,13 +613,11 @@ pub const Socket = struct {
                 sys.ENOTSOCK => return ShutdownError.FileDescriptorNotASocket,
             }
         } else {
-            const rc = blk: {
-                const _how = @intCast(c_int, @enumToInt(how));
-                break :blk sys.socket(self.fd, _sock_type);
-            };
+            const rc = sys.shutdown(self.fd, how.toInt(c_int));
             const err = sys.WSAGetLastError();
             switch (err) {
                 0 => {},
+                else => return unexpectedError(@intCast(u32, err)),
                 sys.ERROR.WSAEINVAL => unreachable,
                 sys.ERROR.WSAEINPROGRESS => unreachable,
                 sys.ERROR.WSAENOTCONN => return ShutdownError.NotConnected,
@@ -774,10 +634,10 @@ pub const Socket = struct {
         }
     }
 
-    // pub fn getSockOpt() {
+    // pub fn getSockOpt(self: Socket) {
     // }
 
-    // pub fn setSockOpt() {
+    // pub fn setSockOpt(self: Socket) {
     // }
 
     // pub fn send(self: Socket, buf: []const u8) {
@@ -786,9 +646,40 @@ pub const Socket = struct {
     // pub fn recv(self: Socket, buf: []u8) {
     // }
 
-    // pub fn sendTo() {
+    // pub fn sendTo(self: Socket) {
     // }
 
-    // pub fn recvFrom() {
+    // pub fn recvFrom(self: Socket) {
     // }
+
+    pub fn setBlocking(self: Self, blocking: bool) SocketAttributeError!void {
+        if (is_posix) {
+            const flags = sys.fcntl(self.fd, sys.F_GETFL, 0);
+            var err = sys.getErrno(flags);
+            switch (err) {
+                0 => {
+                    const mode = if (blocking) flags & ~sys.O_NONBLOCK else flags | sys.O_NONBLOCK;
+                    const rc = sys.fcntl(self.fd, sys.F_SETFL, mode);
+                    err = sys.getErrno(flags);
+                    switch (err) {
+                        0 => {},
+                        else => return unexpectedError(err),
+                    }
+                },
+                else => return unexpectedError(err),
+            }
+        } else {
+            const mode = @intCast(c_ulong, @boolToInt(!blocking));
+            const rc = sys.ioctlsocket(self.fd, sys.FIONBIO, &mode);
+            const err = sys.WSAGetLastError();
+
+            switch (err) {
+                0 => {},
+                else => return unexpectedError(@intCast(u32, err)),
+                sys.ERROR.WSAENOTSOCK => return SocketAttributeError.FileDescriptorNotASocket,
+                sys.ERROR.WSAEINPROGRESS => unreachable,
+                sys.ERROR.WSAEFAULT => unreachable,
+            }
+        }
+    }
 };
