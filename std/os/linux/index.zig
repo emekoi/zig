@@ -1106,6 +1106,38 @@ const k_sigaction = extern struct {
     mask: [2]u32,
 };
 
+// const k_sigval = extern union {
+//     sival_int: c_int,
+//     sival_prt: *c_void,
+// };
+
+// const k_siginfo = extern struct {
+//     si_signo: c_int,
+//     si_errno: c_int,
+//     si_code: c_int,
+//     si_trapno: c_int,
+//     si_pid: c_int,
+//     si_uid: c_uint,
+//     si_status: c_int,
+//     si_utime: c_long,
+//     si_stime: c_long,
+//     si_value: k_sigval,
+//     si_int: c_int,
+//     si_ptr: *c_void,
+//     si_overrun: c_int,
+//     si_timerid: c_int,
+//     si_addr: *c_void,
+//     si_band: c_long,
+//     si_fd: c_int,
+//     si_addr_lsb: c_short,
+//     si_lower: *c_void,
+//     si_upper: *c_void,
+//     si_pkey: c_int,
+//     si_call_addr: *c_void;
+//     si_syscall: c_int,
+//     si_arch: c_uint,
+// };
+
 /// Renamed from `sigaction` to `Sigaction` to avoid conflict with the syscall.
 pub const Sigaction = struct {
     handler: extern fn (i32) void,
