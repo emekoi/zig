@@ -2163,35 +2163,14 @@ stdcallcc fn windowsSegfaultHandler(ExceptionInfo: *windows.EXCEPTION_POINTERS) 
     }
 }
 
-const struct siginfo_t = extern struct {
-    si_signo: c_int,
-    si_errno: c_int,
-    si_code: c_int,
-    si_pid: c_int,
-    si_uid: c_uint,
-    si_status: c_int,
-    si_addr: *c_void,
-};
-
-extern fn posixSegfautHandler(signal: i32, info: *const siginfo_t, ptr: *c_void) void {
+extern fn posixSegfautHandler(signal: i32, info: *const os.posix.siginfo_t, ptr: *c_void) void {
     // TODO find out how to get stack trace using async-signal-safe-functions
     // http://man7.org/linux/man-pages/man7/signal.7.html
     // http://man7.org/linux/man-pages/man7/signal-safety.7.html
-    // panic("Segmentation Fault");
-    const segfault_address = @ptrToInt(info.si_addr);
-    panicExtra(null, segfault_address, "Segmentation Fault");
+    panic("Segmentation Fault");
+    // const segfault_address = @ptrToInt(info.si_addr);
+    // panicExtra(null, segfault_address, "Segmentation Fault at {}!!", segfault_address);
 }
-
-// posix siginfo
-// const struct siginfo_t = extern struct {
-//     si_signo: c_int,
-//     si_errno: c_int,
-//     si_code: c_int,
-//     si_pid: c_int,
-//     si_uid: c_uint,
-//     si_status: c_int,
-//     si_addr: *c_void,
-// };
 
 // linux-amd64 siginfo
 // const struct siginfo_t = extern struct {
@@ -2212,9 +2191,9 @@ pub fn enableSegfaultStackTracing() void  {
             const act = os.posix.Sigaction {
                 .handler = @ptrCast(extern fn(i32)void, posixSegfautHandler),
                 .mask = os.posix.empty_sigset,
-                .flags = os.posix.SA_NODEFER | SA_SIGINFO,
+                .flags = os.posix.SA_NODEFER | os.posix.SA_SIGINFO,
             };
-            os.posix.sigaction(os.posix.SIGSEGV, &act, null);
+            _ = os.posix.sigaction(os.posix.SIGSEGV, &act, null);
         },
         else => @compileError("unsupported OS"),
     }
