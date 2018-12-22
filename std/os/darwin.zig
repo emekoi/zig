@@ -843,24 +843,6 @@ pub const iovec_const = extern struct {
 pub const sigset_t = c.sigset_t;
 pub const empty_sigset = sigset_t(0);
 
-pub const sigval = extern union {
-    sival_int: c_int,
-    sival_ptr: *c_void,
-};
-
-pub const siginfo_t = extern struct {
-    si_signo: c_int,
-    si_errno: c_int,
-    si_code: c_int,
-    si_pid: c_int,
-    si_uid: c_uint,
-    si_status: c_int,
-    si_addr: *c_void,
-    si_value: sigval,
-    si_band: c_long,
-    __pad: [7]c_ulong,
-};
-
 pub const timespec = c.timespec;
 pub const Stat = c.Stat;
 pub const dirent = c.dirent;

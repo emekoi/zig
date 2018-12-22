@@ -94,6 +94,10 @@ extern fn main(c_argc: i32, c_argv: [*][*]u8, c_envp: [*]?[*]u8) i32 {
 // This is marked inline because for some reason LLVM in release mode fails to inline it,
 // and we want fewer call frames in stack traces.
 inline fn callMain() u8 {
+    if (std.debug.runtime_safety) {
+        std.debug.enableSegfaultStackTracing();
+    }
+
     switch (@typeId(@typeOf(root.main).ReturnType)) {
         builtin.TypeId.NoReturn => {
             root.main();
