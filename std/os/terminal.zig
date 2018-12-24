@@ -244,34 +244,31 @@ pub const Terminal = struct {
     }
 
     pub fn getWidth(self: *const Self) usize {
-        if (is_windows) {
-            if (!os.supportsAnsiEscapeCodes(self.file.handle)) {
-                var info: CONSOLE_SCREEN_BUFFER_INFO = undefined;
-                if (windows.GetConsoleScreenBufferInfo(self.file.handle, &info) != 0) {
-                    return @intCast(usize, info.srWindow.Right - info.srWindow.Left + 1);
-                }
+        if (is_windows and !os.supportsAnsiEscapeCodes(self.file.handle)) {
+            var info: windows.CONSOLE_SCREEN_BUFFER_INFO = undefined;
+            if (windows.GetConsoleScreenBufferInfo(self.file.handle, &info) != 0) {
+                return @intCast(usize, info.srWindow.Right - info.srWindow.Left + 1);
             }
         }
     }
 
     pub fn getHeight(self: *const Self) usize {
-        if (is_windows) {
-            if (!os.supportsAnsiEscapeCodes(self.file.handle)) {
-                var info: CONSOLE_SCREEN_BUFFER_INFO = undefined;
-                if (windows.GetConsoleScreenBufferInfo(self.file.handle, &info) != 0) {
-                    return (info.srWindow.Bottom - info.srWindow.Top + 1);
-                }
+        if (is_windows and !os.supportsAnsiEscapeCodes(self.file.handle)) {
+            var info: windows.CONSOLE_SCREEN_BUFFER_INFO = undefined;
+            if (windows.GetConsoleScreenBufferInfo(self.file.handle, &info) != 0) {
+                return @intCast(usize, info.srWindow.Bottom - info.srWindow.Top + 1);
             }
         }
     }
 
-    pub fn setCursorVisible(self: *const Self) usize {
-        if (is_windows) {
-            if (!os.supportsAnsiEscapeCodes(self.file.handle)) {
-                var info: CONSOLE_SCREEN_BUFFER_INFO = undefined;
-                if (windows.GetConsoleScreenBufferInfo(self.file.handle, &info) != 0) {
-                    return (info.srWindow.Bottom - info.srWindow.Top + 1);
-                }
+    pub fn setCursorVisible(self: *const Self, visible: bool) void {
+        if (is_windows and !os.supportsAnsiEscapeCodes(self.file.handle)) {
+
+        } else {
+            if (visible) {
+                try out.write("\x1b[?25h");
+            } else {
+                try out.write("\x1b[?25l");
             }
         }
     }

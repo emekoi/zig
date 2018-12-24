@@ -182,21 +182,6 @@ pub extern "kernel32" stdcallcc fn GetProcAddress(hModule: HMODULE, lpProcName: 
 
 pub extern "kernel32" stdcallcc fn FreeLibrary(hModule: HMODULE) BOOL;
 
-pub extern "kernel32" stdcallcc GetConsoleScreenBufferInfo(
-    hConsoleOutput: HANDLE,
-    lpConsoleScreenBufferInfo: *CONSOLE_SCREEN_BUFFER_INFO
-): WINBOOL;
-
-pub extern "kernel32" stdcallcc GetConsoleCursorInfo(
-    hConsoleOutput: HANDLE,
-    lpConsoleCursorInfo: *CONSOLE_CURSOR_INFO
-): WINBOOL;
-      
-pub extern "kernel32" stdcallcc SetConsoleCursorInfo(
-    hConsoleOutput: HANDLE,
-    lpConsoleCursorInfo: *const CONSOLE_CURSOR_INFO
-): WINBOOL;
-
 pub const FILE_NOTIFY_INFORMATION = extern struct {
     NextEntryOffset: DWORD,
     Action: DWORD,
@@ -222,6 +207,21 @@ pub const FILE_NOTIFY_CHANGE_LAST_WRITE = 16;
 pub const FILE_NOTIFY_CHANGE_DIR_NAME = 2;
 pub const FILE_NOTIFY_CHANGE_FILE_NAME = 1;
 pub const FILE_NOTIFY_CHANGE_ATTRIBUTES = 4;
+
+pub extern "kernel32" stdcallcc GetConsoleScreenBufferInfo(
+    hConsoleOutput: HANDLE,
+    lpConsoleScreenBufferInfo: *CONSOLE_SCREEN_BUFFER_INFO
+): WINBOOL;
+
+pub extern "kernel32" stdcallcc GetConsoleCursorInfo(
+    hConsoleOutput: HANDLE,
+    lpConsoleCursorInfo: *CONSOLE_CURSOR_INFO
+): WINBOOL;
+      
+pub extern "kernel32" stdcallcc SetConsoleCursorInfo(
+    hConsoleOutput: HANDLE,
+    lpConsoleCursorInfo: *const CONSOLE_CURSOR_INFO
+): WINBOOL;
 
 pub const CONSOLE_SCREEN_BUFFER_INFO = extern struct {
     dwSize: COORD,
