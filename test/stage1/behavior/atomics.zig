@@ -48,6 +48,12 @@ fn testAtomicRmw(ptr: *u8) void {
 fn testAtomicLoad(ptr: *u8) void {
     const x = @atomicLoad(u8, ptr, AtomicOrder.SeqCst);
     expect(x == 42);
+    comptime {
+        var a: i32 = 1234;
+        const b: i32 = 12345;
+        expect(@atomicLoad(i32, &a, AtomicOrder.SeqCst) == 1234);
+        expect(@atomicLoad(i32, &b, AtomicOrder.SeqCst) == 12345);
+    }
 }
 
 test "cmpxchg with ptr" {

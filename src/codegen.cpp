@@ -4280,8 +4280,10 @@ static LLVMValueRef ir_render_cmpxchg(CodeGen *g, IrExecutable *executable, IrIn
 }
 
 static LLVMValueRef ir_render_fence(CodeGen *g, IrExecutable *executable, IrInstructionFence *instruction) {
-    LLVMAtomicOrdering atomic_order = to_LLVMAtomicOrdering(instruction->order);
-    LLVMBuildFence(g->builder, atomic_order, false, "");
+    if (!g->is_single_threaded) {
+        LLVMAtomicOrdering atomic_order = to_LLVMAtomicOrdering(instruction->order);
+        LLVMBuildFence(g->builder, atomic_order, false, "");
+    }
     return nullptr;
 }
 
@@ -5095,38 +5097,56 @@ static LLVMValueRef ir_render_coro_alloc_helper(CodeGen *g, IrExecutable *execut
 static LLVMValueRef ir_render_atomic_rmw(CodeGen *g, IrExecutable *executable,
         IrInstructionAtomicRmw *instruction)
 {
-    bool is_signed;
-    ZigType *operand_type = instruction->operand->value.type;
-    if (operand_type->id == ZigTypeIdInt) {
-        is_signed = operand_type->data.integral.is_signed;
+    if (!g->is_single_threaded || true) {
+        bool is_signed;
+        ZigType *operand_type = instruction->operand->value.type;
+        if (operand_type->id == ZigTypeIdInt)
+        {
+            is_signed = operand_type->data.integral.is_signed;
+        }
+        else
+        {
+            is_signed = false;
+        }
+        LLVMAtomicRMWBinOp op = to_LLVMAtomicRMWBinOp(instruction->resolved_op, is_signed);
+        LLVMAtomicOrdering ordering = to_LLVMAtomicOrdering(instruction->resolved_ordering);
+        LLVMValueRef ptr = ir_llvm_value(g, instruction->ptr);
+        LLVMValueRef operand = ir_llvm_value(g, instruction->operand);
+
+        if (get_codegen_ptr_type(operand_type) == nullptr)
+        {
+            return LLVMBuildAtomicRMW(g->builder, op, ptr, operand, ordering, false);
+        }
+
+        // it's a pointer but we need to treat it as an int
+        LLVMValueRef casted_ptr = LLVMBuildBitCast(g->builder, ptr,
+                                                   LLVMPointerType(g->builtin_types.entry_usize->type_ref, 0), "");
+        LLVMValueRef casted_operand = LLVMBuildPtrToInt(g->builder, operand, g->builtin_types.entry_usize->type_ref, "");
+        LLVMValueRef uncasted_result = LLVMBuildAtomicRMW(g->builder, op, casted_ptr, casted_operand, ordering, false);
+        return LLVMBuildIntToPtr(g->builder, uncasted_result, operand_type->type_ref, "");
     } else {
-        is_signed = false;
-    }
-    LLVMAtomicRMWBinOp op = to_LLVMAtomicRMWBinOp(instruction->resolved_op, is_signed);
-    LLVMAtomicOrdering ordering = to_LLVMAtomicOrdering(instruction->resolved_ordering);
-    LLVMValueRef ptr = ir_llvm_value(g, instruction->ptr);
-    LLVMValueRef operand = ir_llvm_value(g, instruction->operand);
+        // LLVMValueRef ptr = ir_llvm_value(g, instruction->ptr);
+        // ir_render_store_ptr(g, executable, (IrInstructionStorePtr *)instruction);
+        // // ir_render_atomic_load or gen_load(g, ptr, instruction->ptr->value.type, "")?
+        // return gen_load(g, ptr, instruction->ptr->value.type, "");
 
-    if (get_codegen_ptr_type(operand_type) == nullptr) {
-        return LLVMBuildAtomicRMW(g->builder, op, ptr, operand, ordering, false);
+        // TODO suport operations
+        return nullptr;
     }
-
-    // it's a pointer but we need to treat it as an int
-    LLVMValueRef casted_ptr = LLVMBuildBitCast(g->builder, ptr,
-        LLVMPointerType(g->builtin_types.entry_usize->type_ref, 0), "");
-    LLVMValueRef casted_operand = LLVMBuildPtrToInt(g->builder, operand, g->builtin_types.entry_usize->type_ref, "");
-    LLVMValueRef uncasted_result = LLVMBuildAtomicRMW(g->builder, op, casted_ptr, casted_operand, ordering, false);
-    return LLVMBuildIntToPtr(g->builder, uncasted_result, operand_type->type_ref, "");
 }
 
 static LLVMValueRef ir_render_atomic_load(CodeGen *g, IrExecutable *executable,
         IrInstructionAtomicLoad *instruction)
 {
-    LLVMAtomicOrdering ordering = to_LLVMAtomicOrdering(instruction->resolved_ordering);
-    LLVMValueRef ptr = ir_llvm_value(g, instruction->ptr);
-    LLVMValueRef load_inst = gen_load(g, ptr, instruction->ptr->value.type, "");
-    LLVMSetOrdering(load_inst, ordering);
-    return load_inst;
+    if (!g->is_single_threaded) {
+        LLVMValueRef ptr = ir_llvm_value(g, instruction->ptr);
+        LLVMValueRef load_inst = gen_load(g, ptr, instruction->ptr->value.type, "");
+        LLVMAtomicOrdering ordering = to_LLVMAtomicOrdering(instruction->resolved_ordering);
+        LLVMSetOrdering(load_inst, ordering);
+        return load_inst;
+    } else {
+        return ir_render_load_ptr(g, executable, (IrInstructionLoadPtr *)instruction);
+    }
 }
 
 static LLVMValueRef ir_render_merge_err_ret_traces(CodeGen *g, IrExecutable *executable,
@@ -5356,10 +5376,6 @@ static LLVMValueRef ir_render_instruction(CodeGen *g, IrExecutable *executable, 
             return ir_render_ref(g, executable, (IrInstructionRef *)instruction);
         case IrInstructionIdErrName:
             return ir_render_err_name(g, executable, (IrInstructionErrName *)instruction);
-        case IrInstructionIdCmpxchgGen:
-            return ir_render_cmpxchg(g, executable, (IrInstructionCmpxchgGen *)instruction);
-        case IrInstructionIdFence:
-            return ir_render_fence(g, executable, (IrInstructionFence *)instruction);
         case IrInstructionIdTruncate:
             return ir_render_truncate(g, executable, (IrInstructionTruncate *)instruction);
         case IrInstructionIdBoolNot:
@@ -5454,10 +5470,6 @@ static LLVMValueRef ir_render_instruction(CodeGen *g, IrExecutable *executable, 
             return ir_render_coro_promise(g, executable, (IrInstructionCoroPromise *)instruction);
         case IrInstructionIdCoroAllocHelper:
             return ir_render_coro_alloc_helper(g, executable, (IrInstructionCoroAllocHelper *)instruction);
-        case IrInstructionIdAtomicRmw:
-            return ir_render_atomic_rmw(g, executable, (IrInstructionAtomicRmw *)instruction);
-        case IrInstructionIdAtomicLoad:
-            return ir_render_atomic_load(g, executable, (IrInstructionAtomicLoad *)instruction);
         case IrInstructionIdSaveErrRetAddr:
             return ir_render_save_err_ret_addr(g, executable, (IrInstructionSaveErrRetAddr *)instruction);
         case IrInstructionIdMergeErrRetTraces:
@@ -5476,6 +5488,14 @@ static LLVMValueRef ir_render_instruction(CodeGen *g, IrExecutable *executable, 
             return ir_render_vector_to_array(g, executable, (IrInstructionVectorToArray *)instruction);
         case IrInstructionIdAssertZero:
             return ir_render_assert_zero(g, executable, (IrInstructionAssertZero *)instruction);
+        case IrInstructionIdFence:
+            return ir_render_fence(g, executable, (IrInstructionFence *)instruction);
+        case IrInstructionIdAtomicRmw:
+            return ir_render_atomic_rmw(g, executable, (IrInstructionAtomicRmw *)instruction);
+        case IrInstructionIdAtomicLoad:
+            return ir_render_atomic_load(g, executable, (IrInstructionAtomicLoad *)instruction);
+        case IrInstructionIdCmpxchgGen:
+            return ir_render_cmpxchg(g, executable, (IrInstructionCmpxchgGen *)instruction);
     }
     zig_unreachable();
 }

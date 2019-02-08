@@ -3287,20 +3287,21 @@ struct IrInstructionCoroAllocHelper {
 struct IrInstructionAtomicRmw {
     IrInstruction base;
 
-    IrInstruction *operand_type;
     IrInstruction *ptr;
+    IrInstruction *operand;
+    IrInstruction *operand_type;
     IrInstruction *op;
     AtomicRmwOp resolved_op;
-    IrInstruction *operand;
     IrInstruction *ordering;
     AtomicOrder resolved_ordering;
 };
 
+
 struct IrInstructionAtomicLoad {
     IrInstruction base;
 
-    IrInstruction *operand_type;
     IrInstruction *ptr;
+    IrInstruction *operand_type;
     IrInstruction *ordering;
     AtomicOrder resolved_ordering;
 };
