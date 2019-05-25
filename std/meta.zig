@@ -196,13 +196,12 @@ test "std.meta.definitions" {
     }
 }
 
-pub fn definitionInfo(comptime T: type, comptime def_name: []const u8) TypeInfo.Definition {
+pub fn definitionInfo(comptime T: type, comptime def_name: []const u8) ?TypeInfo.Definition {
     inline for (comptime definitions(T)) |def| {
         if (comptime mem.eql(u8, def.name, def_name))
             return def;
     }
-
-    @compileError("'" ++ @typeName(T) ++ "' has no definition '" ++ def_name ++ "'");
+    return null;
 }
 
 test "std.meta.definitionInfo" {
@@ -220,15 +219,15 @@ test "std.meta.definitionInfo" {
         fn a() void {}
     };
 
-    const infos = comptime []TypeInfo.Definition{
+    const infos = comptime []?TypeInfo.Definition{
         definitionInfo(E1, "a"),
         definitionInfo(S1, "a"),
         definitionInfo(U1, "a"),
     };
 
     inline for (infos) |info| {
-        testing.expect(comptime mem.eql(u8, info.name, "a"));
-        testing.expect(!info.is_pub);
+        testing.expect(comptime mem.eql(u8, info.?.name, "a"));
+        testing.expect(!info.?.is_pub);
     }
 }
 
@@ -277,19 +276,18 @@ test "std.meta.fields" {
     testing.expect(comptime uf[0].field_type == u8);
 }
 
-pub fn fieldInfo(comptime T: type, comptime field_name: []const u8) switch (@typeInfo(T)) {
+pub fn fieldInfo(comptime T: type, comptime field_name: []const u8) ?(switch (@typeInfo(T)) {
     TypeId.Struct => TypeInfo.StructField,
     TypeId.Union => TypeInfo.UnionField,
     TypeId.ErrorSet => TypeInfo.Error,
     TypeId.Enum => TypeInfo.EnumField,
     else => @compileError("Expected struct, union, error set or enum type, found '" ++ @typeName(T) ++ "'"),
-} {
+}) {
     inline for (comptime fields(T)) |field| {
         if (comptime mem.eql(u8, field.name, field_name))
             return field;
     }
-
-    @compileError("'" ++ @typeName(T) ++ "' has no field '" ++ field_name ++ "'");
+    return null;
 }
 
 test "std.meta.fieldInfo" {
@@ -304,10 +302,10 @@ test "std.meta.fieldInfo" {
         a: u8,
     };
 
-    const e1f = comptime fieldInfo(E1, "A");
-    const e2f = comptime fieldInfo(E2, "A");
-    const sf = comptime fieldInfo(S1, "a");
-    const uf = comptime fieldInfo(U1, "a");
+    const e1f = comptime fieldInfo(E1, "A").?;
+    const e2f = comptime fieldInfo(E2, "A").?;
+    const sf = comptime fieldInfo(S1, "a").?;
+    const uf = comptime fieldInfo(U1, "a").?;
 
     testing.expect(mem.eql(u8, e1f.name, "A"));
     testing.expect(mem.eql(u8, e2f.name, "A"));

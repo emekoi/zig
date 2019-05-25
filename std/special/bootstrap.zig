@@ -5,6 +5,8 @@ const root = @import("@root");
 const std = @import("std");
 const builtin = @import("builtin");
 const assert = std.debug.assert;
+const Definition = builtin.TypeInfo.Definition;
+const definitionInfo = std.meta.definitionInfo;
 
 var argc_ptr: [*]usize = undefined;
 
@@ -17,7 +19,13 @@ comptime {
     if (builtin.link_libc) {
         @export("main", main, .Strong);
     } else if (builtin.os == .windows) {
-        @export("WinMainCRTStartup", WinMainCRTStartup, .Strong);
+        if (definitionInfo(root, "WinMainCRTStartup")) |def| {
+            if (def.data != Definition.Data.Fn or !def.data.Fn.is_export) {
+                @export("WinMainCRTStartup", WinMainCRTStartup, .Strong);
+            }
+        } else {
+            @export("WinMainCRTStartup", WinMainCRTStartup, .Strong);
+        }
     } else if (is_wasm and builtin.os == .freestanding) {
         @export("_start", wasm_freestanding_start, .Strong);
     } else {
@@ -57,7 +65,7 @@ nakedcc fn _start() noreturn {
     @noInlineCall(posixCallMainAndExit);
 }
 
-extern fn WinMainCRTStartup() noreturn {
+stdcallcc fn WinMainCRTStartup() noreturn {
     @setAlignStack(16);
     if (!builtin.single_threaded) {
         _ = @import("bootstrap_windows_tls.zig");
