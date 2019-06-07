@@ -145,7 +145,11 @@ static bool arch_available_in_llvm(ZigLLVM_ArchType arch) {
 
 static int print_target_list(FILE *f) {
     ZigTarget native;
+    Buf triple_buf = BUF_INIT;
     get_native_target(&native);
+    get_target_triple(&triple_buf, &native);
+
+    fprintf(f, "Native: %s\n\n", buf_ptr(&triple_buf));
 
     fprintf(f, "Architectures:\n");
     size_t arch_count = target_arch_count();
