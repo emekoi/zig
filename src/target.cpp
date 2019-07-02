@@ -973,7 +973,7 @@ const char *target_exe_file_ext(const ZigTarget *target) {
 }
 
 const char *target_lib_file_prefix(const ZigTarget *target) {
-    if (target->os == OsWindows || target->os == OsUefi || target_is_wasm(target)) {
+    if ((target->os == OsWindows && target->abi == ZigLLVM_MSVC) || target->os == OsUefi || target_is_wasm(target)) {
         return "";
     } else {
         return "lib";
@@ -988,7 +988,11 @@ const char *target_lib_file_ext(const ZigTarget *target, bool is_static,
     }
     if (target->os == OsWindows || target->os == OsUefi) {
         if (is_static) {
-            return ".lib";
+            if (target->abi == ZigLLVM_MSVC) {
+                return ".lib";
+            } else {
+                return ".a";
+            }
         } else {
             return ".dll";
         }
@@ -1353,7 +1357,7 @@ bool target_os_requires_libc(Os os) {
 bool target_supports_fpic(const ZigTarget *target) {
   // This is not whether the target supports Position Independent Code, but whether the -fPIC
   // C compiler argument is valid.
-  return target->os != OsWindows;
+  return !(target->os == OsWindows && target->abi == ZigLLVM_MSVC);
 }
 
 bool target_supports_stack_probing(const ZigTarget *target) {

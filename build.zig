@@ -175,7 +175,7 @@ fn fileExists(filename: []const u8) !bool {
 }
 
 fn addCppLib(b: *Builder, lib_exe_obj: var, cmake_binary_dir: []const u8, lib_name: []const u8) void {
-    const lib_prefix = if (lib_exe_obj.target.isWindows()) "" else "lib";
+    const lib_prefix = if (lib_exe_obj.target.isWindows() and lib_exe_obj.target.getAbi() == builtin.Abi.msvc) "" else "lib";
     lib_exe_obj.addObjectFile(fs.path.join(b.allocator, [_][]const u8{
         cmake_binary_dir,
         "zig_cpp",

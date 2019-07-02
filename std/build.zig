@@ -846,11 +846,7 @@ pub const Target = union(enum) {
     }
 
     pub fn oFileExt(self: Target) []const u8 {
-        const abi = switch (self) {
-            Target.Native => builtin.abi,
-            Target.Cross => |t| t.abi,
-        };
-        return switch (abi) {
+        return switch (self.getAbi()) {
             builtin.Abi.msvc => ".obj",
             else => ".o",
         };
@@ -864,8 +860,8 @@ pub const Target = union(enum) {
     }
 
     pub fn libFileExt(self: Target) []const u8 {
-        return switch (self.getOs()) {
-            .windows => ".lib",
+        return switch (self.getAbi()) {
+            builtin.Abi.msvc => ".lib",
             else => ".a",
         };
     }
@@ -881,6 +877,13 @@ pub const Target = union(enum) {
         switch (self) {
             Target.Native => return builtin.arch,
             Target.Cross => |t| return t.arch,
+        }
+    }
+
+    pub fn getAbi(self: Target) builtin.Abi {
+        switch (self) {
+            Target.Native => return builtin.abi,
+            Target.Cross => |t| return t.abi,
         }
     }
 
@@ -1091,7 +1094,11 @@ pub const LibExeObjStep = struct {
                 if (!self.is_dynamic) {
                     switch (self.target.getOs()) {
                         .windows => {
-                            self.out_filename = self.builder.fmt("{}.lib", self.name);
+                            if (self.target.getAbi() == builtin.Abi.msvc) {
+                                self.out_filename = self.builder.fmt("{}.lib", self.name);
+                            } else {
+                                self.out_filename = self.builder.fmt("lib{}.a", self.name);
+                            }
                         },
                         else => {
                             if (self.target.isWasm()) {
@@ -1112,7 +1119,11 @@ pub const LibExeObjStep = struct {
                         },
                         .windows => {
                             self.out_filename = self.builder.fmt("{}.dll", self.name);
-                            self.out_lib_filename = self.builder.fmt("{}.lib", self.name);
+                            if (self.target.getAbi() == builtin.Abi.msvc) {
+                                self.out_lib_filename = self.builder.fmt("{}.lib", self.name);
+                            } else {
+                                self.out_lib_filename = self.builder.fmt("lib{}.dll.a", self.name);
+                            }
                         },
                         else => {
                             self.out_filename = self.builder.fmt("lib{}.so.{d}.{d}.{d}", self.name, self.version.major, self.version.minor, self.version.patch);
