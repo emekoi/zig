@@ -1,0 +1,23 @@
+#!/bin/sh
+
+set -x
+set -e
+
+# no packaging steps are needed because the exe from the msvc ci job auto-detects msys/cygwin platforms
+
+ZIGBUILDDIR="$(pwd)/build"
+PREFIX="$ZIGBUILDDIR/release"
+CMAKEFLAGS="-DCMAKE_COLOR_MAKEFILE=OFF -DCMAKE_INSTALL_PREFIX=$PREFIX -DZIG_STATIC=ON"
+
+pacman -Su --needed --noconfirm
+pacman --noconfirm --needed -S git mingw-w64-x86_64-cmake mingw-w64-x86_64-clang mingw-w64-x86_64-lld
+
+mkdir build
+cd build
+
+BUILD_FLAGS="-DCMAKE_BUILD_TYPE=RelWithDebInfo $CMAKEFLAGS -DCMAKE_C_FLAGS='-fuse-ld=lld -Wl,/debug,/pdb:zig.pdb' -DCMAKE_CXX_FLAGS='-fuse-ld=lld -Wl,/debug,/pdb:zig.pdb'"
+
+cmake .. -G 'MSYS Makefiles' $BUILD_FLAGS
+
+make -j2 install
+release/bin/zig build --build-file ../build.zig test

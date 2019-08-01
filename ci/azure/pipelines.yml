@@ -25,7 +25,7 @@ jobs:
   - script: ci/azure/linux_script
     name: main
     displayName: 'Build and test'
-- job: BuildWindows
+- job: BuildWindowsMSVC
   pool:
     vmImage: 'vs2017-win2016'
 
@@ -33,22 +33,45 @@ jobs:
 
   steps:
   - script: |
-      git clone https://github.com/lazka/msys2-ci-base.git %CD:~0,2%\msys64
-      %CD:~0,2%\msys64\usr\bin\rm -rf %CD:~0,2%\msys64\.git
-      set PATH=%CD:~0,2%\msys64\usr\bin;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem
-      %CD:~0,2%\msys64\usr\bin\pacman --noconfirm -Syyuu
+      git clone https://github.com/msys2/msys2-ci-base.git $(Pipeline.Workspace)\msys64
+      $(Pipeline.Workspace)\msys64\usr\bin\rm -rf $(Pipeline.Workspace)\msys64\.git
+      set PATH=$(Pipeline.Workspace)\msys64\usr\bin;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem
+      $(Pipeline.Workspace)\msys64\usr\bin\pacman --noconfirm -Syyuu
     displayName: Install and Update MSYS2
   - task: DownloadSecureFile@1
     inputs:
       secureFile: s3cfg
-  - script: ci/azure/windows_script.bat
+  - script: ci/azure/windows_script_msvc.bat
     name: main
     displayName: 'Build and test'
+- job: BuildWindowsMSYS
+  pool:
+    vmImage: 'vs2017-win2016'
+
+  timeoutInMinutes: 360
+
+  steps:
+  - script: |
+      git clone https://github.com/msys2/msys2-ci-base.git $(Pipeline.Workspace)\msys64
+      $(Pipeline.Workspace)\msys64\usr\bin\rm -rf $(Pipeline.Workspace)\msys64\.git
+      set PATH=$(Pipeline.Workspace)\msys64\usr\bin;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem
+      $(Pipeline.Workspace)\msys64\usr\bin\pacman --noconfirm -Syyuu
+    displayName: Install and Update MSYS2
+  - task: DownloadSecureFile@1
+    inputs:
+      secureFile: s3cfg
+  - script: |
+      set PATH=C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem
+      set "SRCROOT=%cd%"
+      $(Pipeline.Workspace)\msys64\usr\bin\bash -lc "bash ${SRCROOT}/ci/azure/windows_msys_script"
+    name: main
+    displayName: 'Build and test'
+
 - job: UpdateDownloadPage
   dependsOn:
   - BuildMacOS
   - BuildLinux
-  - BuildWindows
+  - BuildWindowsMSVC
   condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/master'))
   strategy:
     maxParallel: 1
@@ -61,9 +84,9 @@ jobs:
     linux_tarball: $[ dependencies.BuildLinux.outputs['main.tarball'] ]
     linux_shasum: $[ dependencies.BuildLinux.outputs['main.shasum'] ]
     linux_bytesize: $[ dependencies.BuildLinux.outputs['main.bytesize'] ]
-    windows_tarball: $[ dependencies.BuildWindows.outputs['main.tarball'] ]
-    windows_shasum: $[ dependencies.BuildWindows.outputs['main.shasum'] ]
-    windows_bytesize: $[ dependencies.BuildWindows.outputs['main.bytesize'] ]
+    windows_tarball: $[ dependencies.BuildWindowsMSVC.outputs['main.tarball'] ]
+    windows_shasum: $[ dependencies.BuildWindowsMSVC.outputs['main.shasum'] ]
+    windows_bytesize: $[ dependencies.BuildWindowsMSVC.outputs['main.bytesize'] ]
   steps:
   - task: DownloadSecureFile@1
     inputs:
