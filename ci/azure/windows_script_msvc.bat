@@ -22,6 +22,6 @@ msbuild /p:Configuration=Release INSTALL.vcxproj || exit /b
 
 "%ZIGINSTALLDIR%\bin\zig.exe" build --build-file ..\build.zig test || exit /b
 
-set "PATH=%CD:~0,2%\msys64\usr\bin;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem"
+set "PATH=%Pipeline.Workspace%\msys64\usr\bin;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem"
 SET "MSYSTEM=MINGW64"
 bash -lc "cd ${SRCROOT} && ci/azure/windows_upload" || exit /b

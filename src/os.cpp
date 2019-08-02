@@ -1179,7 +1179,7 @@ bool ATTRIBUTE_MUST_USE os_is_cygwin_pty(int fd) {
     free(nameinfo);
     return (p != NULL);
 #else
-    return false
+    return false;
 #endif
 }
 
