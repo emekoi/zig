@@ -1185,7 +1185,7 @@ bool ATTRIBUTE_MUST_USE os_is_cygwin_pty(int fd) {
 
 bool os_stderr_tty(void) {
 #if defined(ZIG_OS_WINDOWS)
-    return _isatty(_fileno(stderr)) != 0 || os_is_cygwin_pty(_fileno(stderr));
+    return _isatty(fileno(stderr)) != 0 || os_is_cygwin_pty(fileno(stderr));
 #elif defined(ZIG_OS_POSIX)
     return isatty(STDERR_FILENO) != 0;
 #else
