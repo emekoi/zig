@@ -15,13 +15,7 @@ pacman --noconfirm --needed -S git mingw-w64-x86_64-cmake mingw-w64-x86_64-clang
 mkdir build
 cd build
 
-if [ "${BUILD_REASON}" == "PullRequest" ]; then
-    BUILD_FLAGS="-DCMAKE_BUILD_TYPE=RelWithDebInfo $CMAKEFLAGS -DCMAKE_C_FLAGS=\"-fuse-ld=lld -Wl,/debug,/pdb:zig.pdb\" -DCMAKE_CXX_FLAGS=\"-fuse-ld=lld -Wl,/debug,/pdb:zig.pdb\""
-else
-    BUILD_FLAGS="-DCMAKE_BUILD_TYPE=Release $CMAKEFLAGS -DCMAKE_C_FLAGS=\"-fuse-ld=lld\" -DCMAKE_CXX_FLAGS=\"-fuse-ld=lld\""
-fi
-
-cmake .. -G "MSYS Makefiles" $BUILD_FLAGS
+cmake .. -G 'MSYS Makefiles' -DCMAKE_BUILD_TYPE=RelWithDebInfo $CMAKEFLAGS -DCMAKE_C_FLAGS='-fuse-ld=lld -Wl,/debug,/pdb:zig.pdb' -DCMAKE_CXX_FLAGS='-fuse-ld=lld -Wl,/debug,/pdb:zig.pdb'
 
 make -j2 install
 release/bin/zig build --build-file ../build.zig test
