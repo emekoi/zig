@@ -3,9 +3,9 @@ SET "SRCROOT=%cd%"
 SET "PREVPATH=%PATH%"
 SET "PREVMSYSEM=%MSYSTEM%"
 
-set "PATH=%Pipeline.Workspace%\msys64\usr\bin;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem"
+set "PATH=%CD:~0,2%\msys64\usr\bin;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem"
 SET "MSYSTEM=MINGW64"
-%Pipeline.Workspace%\msys64\usr\bin\bash -lc "cd ${SRCROOT} && ci/azure/windows_install_msvc" || exit /b
+bash -lc "cd ${SRCROOT} && ci/azure/windows_install" || exit /b
 SET "PATH=%PREVPATH%"
 SET "MSYSTEM=%PREVMSYSTEM%"
 
@@ -22,6 +22,6 @@ msbuild /p:Configuration=Release INSTALL.vcxproj || exit /b
 
 "%ZIGINSTALLDIR%\bin\zig.exe" build --build-file ..\build.zig test || exit /b
 
-set "PATH=%Pipeline.Workspace%\msys64\usr\bin;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem"
+set "PATH=%CD:~0,2%\msys64\usr\bin;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem"
 SET "MSYSTEM=MINGW64"
-%Pipeline.Workspace%\msys64\usr\bin\bash -lc "cd ${SRCROOT} && ci/azure/windows_upload" || exit /b
+bash -lc "cd ${SRCROOT} && ci/azure/windows_upload" || exit /b
