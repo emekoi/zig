@@ -66,6 +66,9 @@ jobs:
       $(Pipeline.Workspace)\msys64\usr\bin\bash -lc "bash ${SRCROOT}/ci/azure/windows_msys_script"
     name: main
     displayName: 'Build and test'
+    env:
+      MSYSTEM: MINGW64
+      CHERE_INVOKING: yes
 
 - job: UpdateDownloadPage
   dependsOn:

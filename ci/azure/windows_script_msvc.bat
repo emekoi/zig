@@ -5,7 +5,7 @@ SET "PREVMSYSEM=%MSYSTEM%"
 
 set "PATH=%Pipeline.Workspace%\msys64\usr\bin;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem"
 SET "MSYSTEM=MINGW64"
-bash -lc "cd ${SRCROOT} && ci/azure/windows_install_msvc" || exit /b
+%Pipeline.Workspace%\msys64\usr\bin\bash -lc "cd ${SRCROOT} && ci/azure/windows_install_msvc" || exit /b
 SET "PATH=%PREVPATH%"
 SET "MSYSTEM=%PREVMSYSTEM%"
 
@@ -24,4 +24,4 @@ msbuild /p:Configuration=Release INSTALL.vcxproj || exit /b
 
 set "PATH=%Pipeline.Workspace%\msys64\usr\bin;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem"
 SET "MSYSTEM=MINGW64"
-bash -lc "cd ${SRCROOT} && ci/azure/windows_upload" || exit /b
+%Pipeline.Workspace%\msys64\usr\bin\bash -lc "cd ${SRCROOT} && ci/azure/windows_upload" || exit /b
